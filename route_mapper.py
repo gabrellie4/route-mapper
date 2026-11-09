@@ -198,12 +198,16 @@ ROUTE_COLORS = [
 ]
 
 
+OAKLAND_CENTER = [37.7925, -122.2345]   # middle of the city limits, hills to the bay
+OAKLAND_ZOOM = 12
+
+
 def new_project(name="Untitled study area"):
     return {
         "name": name,
         "settings": dict(DEFAULT_SETTINGS),
-        "center": [37.7749, -122.2241],   # Fruitvale-ish
-        "zoom": 15,
+        "center": OAKLAND_CENTER,         # all of Oakland; zoom in from there
+        "zoom": OAKLAND_ZOOM,
         "basemap": "muted",
         "routes": [new_route("Route 1", 1, ROUTE_COLORS[0][0])],
     }
@@ -1270,6 +1274,19 @@ header h1 span{color:var(--muted);font-weight:400}
 .endtab{width:18px;height:18px;border-radius:5px;background:#fff;border:3px solid var(--accent);
   box-shadow:0 1px 4px rgba(0,0,0,.55);cursor:grab}
 .endtab.fin{background:var(--accent);border-color:#fff}
+.ref{border:1px solid var(--line);border-radius:7px;padding:6px 8px;margin-bottom:6px;background:var(--ink3)}
+.refhead{display:flex;align-items:center;gap:6px}
+.refhead input[type=color]{width:24px;height:20px;padding:0;border:1px solid var(--line);border-radius:4px;background:none}
+.refname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}
+.refcount{color:var(--muted);font-size:11.5px}
+.refby{display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--muted);font-size:11.5px}
+.refby select{flex:1;background:var(--ink2);border:1px solid var(--line);border-radius:4px;padding:2px 4px;font-size:11.5px}
+.reflegend{display:flex;flex-wrap:wrap;gap:3px 10px;margin-top:5px;font-size:11px;color:var(--muted)}
+.reflegend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+.refpop{font-size:12px;line-height:1.35}
+.refpop table{border-collapse:collapse;margin-top:4px}
+.refpop td{padding:1px 8px 1px 0;vertical-align:top}
+.refpop td:first-child{color:#667;white-space:nowrap}
 .lotpin{width:16px;height:16px;border-radius:50%;background:var(--accent);border:3px solid #fff;
   box-shadow:0 1px 4px rgba(0,0,0,.6);cursor:grab}
 .spacer{flex:1}
@@ -1362,16 +1379,13 @@ section:last-child{border-bottom:0}
   color:#1B2430;font-weight:600;padding:5px 10px}
 #lotfinish:disabled{opacity:.45;cursor:default}
 #lotcancel{background:transparent;border:1px solid var(--line);border-radius:5px;padding:5px 10px}
-#insbar{display:none;flex-wrap:wrap;align-items:center;gap:8px;margin-top:9px;padding:8px 10px;
-  background:var(--ink3);border:1px solid var(--accent);border-radius:7px}
-#insbar span{flex:1 1 100%;font-size:12.5px;line-height:1.4}
-#insbar label{margin-right:auto}
-#insdone{background:var(--accent);border:1px solid var(--accent);border-radius:5px;
-  color:#1B2430;font-weight:600;padding:5px 12px}
-#inscancel{background:transparent;border:1px solid var(--line);border-radius:5px;padding:5px 10px}
 .addgap{display:block;width:100%;background:transparent;border:1px dashed var(--line);border-radius:7px;
   margin-bottom:6px;padding:6px 10px;color:var(--muted);font-size:12px;text-align:left}
 .addgap:hover,.mini.addafter:hover{color:var(--accent);border-color:var(--accent)}
+.addgap.on{border-style:solid;border-color:var(--accent);color:var(--accent)}
+.leaflet-control-rotate-toggle{background-color:#fff !important}   /* the plugin paints it orange */
+.midpt{width:13px;height:13px;border-radius:50%;background:#fff;border:2px solid #666;
+  box-shadow:0 1px 3px rgba(0,0,0,.45);cursor:grab}
 .leaflet-container{background:#263546}
 kbd{background:var(--ink3);border:1px solid var(--line);border-radius:3px;padding:1px 5px;
   font-family:inherit;font-size:11.5px}
@@ -1439,21 +1453,15 @@ kbd{background:var(--ink3);border:1px solid var(--line);border-radius:3px;paddin
       <button id="lotcancel">Discard</button>
       <button id="lotfinish">Finish shape</button>
     </div>
-    <div id="insbar">
-      <span id="instext"></span>
-      <label class="opt" title="Add the walking legs needed to reach the new blocks and get back to the route, so that walk is counted">
-        <input type="checkbox" id="insJoin" checked> join up</label>
-      <button id="inscancel">Discard</button>
-      <button id="insdone">Done</button>
-    </div>
     <p class="tiny" style="margin:9px 0 0">Click along the street to lay the route down.
     Each click closes the leg behind it, so switching between counting and walking
     mid-route just means clicking the other tool and carrying on. A parking lot is tied
     to the route by a line where it is counted; click the lot to see the line, and drag
-    its end along the route to move the lot in the walking order. Missed blocks? Click
-    <b>＋</b> in the list, then draw them starting on the route where they branch off and
-    finish back on it; they're stitched into the walk there and the IDs renumber.
-    <kbd>C</kbd> count · <kbd>W</kbd> walk · <kbd>L</kbd> lot · <kbd>A</kbd> direction arrows · <kbd>I</kbd> add blocks at the selected joint · <kbd>P</kbd> corner handles · <kbd>Esc</kbd> select · <kbd>⌘Z</kbd> undo · <kbd>⇧⌘Z</kbd> redo · <kbd>Delete</kbd> removes the selected block. Drag an ID to move that block face, or drag a corner handle or endpoint to adjust the line. A selected block shows its own two ends as blue tabs: drag one to pull just that end away (it keeps its number), and drop it on another block's end to join them.</p>
+    its end along the route to move the lot in the walking order. Missed a block? Turn on
+    <b>＋ Insert a block</b> (or press <kbd>I</kbd>) and drag the white handle in the middle of a
+    line: the block splits there and the IDs after it renumber. Right-click and drag to rotate
+    the map.
+    <kbd>C</kbd> count · <kbd>W</kbd> walk · <kbd>L</kbd> lot · <kbd>A</kbd> direction arrows · <kbd>I</kbd> insert a block · <kbd>F</kbd> flip the selected block · <kbd>P</kbd> corner handles · <kbd>Esc</kbd> select · <kbd>⌘Z</kbd> undo · <kbd>⇧⌘Z</kbd> redo · <kbd>Delete</kbd> removes the selected block. Drag an ID to move that block face, or drag a corner handle or endpoint to adjust the line. A selected block shows its own two ends as blue tabs: drag one to pull just that end away (it keeps its number), and drop it on another block's end to join them.</p>
   </section>
 
   <section>
@@ -1480,13 +1488,25 @@ kbd{background:var(--ink3);border:1px solid var(--line);border-radius:3px;paddin
   </section>
 
   <section>
+    <h2>Reference layers</h2>
+    <div id="refs"></div>
+    <button class="hbtn" id="bRef" style="width:100%">Add a layer…</button>
+    <input type="file" id="refIn" accept=".csv,.txt,.geojson,.json,.kml,.kmz,.zip" multiple style="display:none">
+    <p class="tiny" style="margin:8px 0 0">Show parking meters, a study-area outline or anything
+    else from ArcGIS under the routes, to see what needs mapping. Reads CSV (latitude and
+    longitude columns), GeoJSON, KML/KMZ and zipped shapefiles; you can also drop files on the
+    map. Click a feature for its details. Layers stay in this browser and are not saved in
+    the project.</p>
+  </section>
+
+  <section>
     <h2>Timing model</h2>
     <div class="rowline"><label for="sMin">Minutes per block</label><input id="sMin" type="number" step="0.25" min="0"></div>
     <div class="rowline"><label for="sSp">Spaces that counts as a block</label><input id="sSp" type="number" step="1" min="1"></div>
     <div class="rowline"><label for="sWalk">Walking pace, ft/min</label><input id="sWalk" type="number" step="10" min="1"></div>
     <div class="rowline"><label for="sSkip">Skip 10, 20, 30…</label><input id="sSkip" type="checkbox" style="width:auto"></div>
-    <p class="tiny">A block face takes <span id="fx" class="num"></span>. Connector legs are
-    distance ÷ pace. Fruitvale and Grand Lake both skip every multiple of ten in their
+    <p class="tiny">A block face takes <span id="fx" class="num"></span>. Walk-only legs count
+    their walking time (distance ÷ pace) but no counting time. Fruitvale and Grand Lake both skip every multiple of ten in their
     IDs, so that stays on unless a new study area drops the convention.</p>
   </section>
 
@@ -1519,6 +1539,9 @@ kbd{background:var(--ink3);border:1px solid var(--line);border-radius:3px;paddin
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Map rotation. 0.2.8 is the long-standing release; 0.3-0.5 came out in a rush in
+     Oct-Nov 2026 and are not pinned until they settle. -->
+<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
 <script>
 const $ = s => document.querySelector(s);
 // Names, notes and manual IDs are free text, and a project can be imported from
@@ -1536,7 +1559,29 @@ let P = null, tool = 'none', activeRoute = 0, selected = null, lotPts = [],
     breakAway = false, selVertex = null;
 let undoStack = [], redoStack = [], snapshot = null;
 
-const map = L.map('map', {zoomControl:true, doubleClickZoom:false}).setView([37.7749,-122.2241], 15);
+// Opens on all of Oakland (a project's own saved view takes over once it loads).
+// rotate: right-click and drag to turn the map, as in ArcGIS Online; Shift +
+// scroll also turns it, and the compass button sets it back to north up.
+const map = L.map('map', {zoomControl:true, doubleClickZoom:false, rotate:true,
+  rotateControl:{closeOnZeroBearing:false}, touchRotate:true, shiftKeyRotate:true})
+  .setView([37.7925, -122.2345], 12);
+(() => {
+  const el = map.getContainer();
+  let spin = null;
+  el.addEventListener('contextmenu', e => e.preventDefault());
+  el.addEventListener('mousedown', e => {
+    if (e.button !== 2 || !map.setBearing) return;
+    const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    spin = {cx, cy, a0: Math.atan2(e.clientY - cy, e.clientX - cx), b0: map.getBearing()};
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e => {
+    if (!spin) return;
+    const a = Math.atan2(e.clientY - spin.cy, e.clientX - spin.cx);
+    map.setBearing(spin.b0 + (a - spin.a0) * 180 / Math.PI);
+  });
+  window.addEventListener('mouseup', e => { if (e.button === 2) spin = null; });
+})();
 // All three tile providers below are free and need no API key.
 const bases = {
   streets: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -1559,6 +1604,370 @@ const draft = L.layerGroup().addTo(map);
 // A dashed preview from the pen to the pointer, so you can see where the next
 // click will lay a leg. Most useful when adding a missed block mid-route.
 const rubber = L.polyline([], {color:'#5AA9F2', weight:2, dashArray:'4 6', interactive:false});
+
+// ---- reference layers ---------------------------------------------------------
+// Files loaded to see what's there before routing: parking meters, a study-area
+// outline drawn in ArcGIS, and so on. They draw under the routes and are never
+// part of the project (every edit posts the whole project, and thousands of meters
+// would slow that down). They are kept in this browser until removed.
+// Reads CSV (latitude/longitude columns, a WKT column such as the_geom, or
+// "(lat, lng)" pairs), GeoJSON, ArcGIS JSON, KML/KMZ and zipped shapefiles, in
+// WGS 1984 or Web Mercator.
+// Under the routes (400), and beside them: with map rotation on, panes have to live
+// in the rotating pane with everything else or they draw in the wrong place.
+map.createPane('refPane', map.getPane('overlayPane').parentElement).style.zIndex = 350;
+const refRenderer = L.canvas({pane: 'refPane'});
+const refGroup = L.layerGroup().addTo(map);
+const REF_COLORS = ['#E5484D', '#5AA9F2', '#F5D90A', '#30A46C', '#8E4EC6', '#12A594',
+                    '#D6409F', '#3E63DD', '#978365', '#F76808'];
+let refs = [];   // {id, name, color, visible, by, features}
+
+function parseCSV(text){
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (q){
+      if (c === '"'){ if (text[i+1] === '"'){ f += '"'; i++; } else q = false; }
+      else f += c;
+    } else if (c === '"') q = true;
+    else if (c === ','){ row.push(f); f = ''; }
+    else if (c === '\n' || c === '\r'){
+      if (c === '\r' && text[i+1] === '\n') i++;
+      row.push(f); f = '';
+      if (row.length > 1 || row[0] !== '') rows.push(row);
+      row = [];
+    } else f += c;
+  }
+  if (f !== '' || row.length){ row.push(f); rows.push(row); }
+  return rows;
+}
+// Well-known text, as ArcGIS and open-data portals write it in geometry columns.
+function parseWKT(s){
+  const m = /^\s*(MULTIPOINT|POINT|MULTILINESTRING|LINESTRING|MULTIPOLYGON|POLYGON)\s*(?:ZM|Z|M)?\s*(\(.*\))\s*$/i.exec(s || '');
+  if (!m) return null;
+  const num = '(-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?)';
+  let arr;
+  try {
+    arr = JSON.parse(m[2].replace(new RegExp(num + '\\s+' + num + '(?:\\s+-?[\\d.eE+-]+)*', 'g'), '[$1,$2]')
+                         .replace(/\(/g, '[').replace(/\)/g, ']'));
+  } catch (e) { return null; }
+  const type = m[1].toUpperCase();
+  if (type === 'POINT') return {type: 'Point', coordinates: arr[0]};
+  if (type === 'MULTIPOINT') return {type: 'MultiPoint', coordinates: arr.map(p => Array.isArray(p[0]) ? p[0] : p)};
+  return {type: {LINESTRING: 'LineString', MULTILINESTRING: 'MultiLineString',
+                 POLYGON: 'Polygon', MULTIPOLYGON: 'MultiPolygon'}[type], coordinates: arr};
+}
+function csvFeatures(text){
+  const rows = parseCSV(text.replace(/^﻿/, ''));
+  if (rows.length < 2) throw new Error('the CSV has no rows');
+  const head = rows[0].map(h => h.trim()), low = head.map(h => h.toLowerCase());
+  const find = names => low.findIndex(h => names.includes(h));
+  const la = find(['latitude', 'lat', 'y', 'point_y', 'ycoord', 'y_coord']);
+  const lo = find(['longitude', 'lon', 'lng', 'long', 'x', 'point_x', 'xcoord', 'x_coord']);
+  const sample = rows.slice(1, 60);
+  const wkt = head.findIndex((h, i) => sample.some(r => /^\s*(MULTI)?(POINT|LINESTRING|POLYGON)\b/i.test(r[i] || '')));
+  const pair = head.findIndex((h, i) => sample.some(r => /^\(\s*-?\d+\.\d+\s*,\s*-?\d+\.\d+\s*\)$/.test((r[i] || '').trim())));
+  if ((la < 0 || lo < 0) && wkt < 0 && pair < 0)
+    throw new Error('no latitude and longitude columns (or geometry column) found');
+  const feats = [];
+  for (const r of rows.slice(1)){
+    let g = null;
+    if (la >= 0 && lo >= 0){
+      const y = parseFloat(r[la]), x = parseFloat(r[lo]);
+      if (isFinite(x) && isFinite(y) && (x || y)) g = {type: 'Point', coordinates: [x, y]};
+    }
+    if (!g && wkt >= 0) g = parseWKT(r[wkt]);
+    if (!g && pair >= 0){
+      const m = /\(\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\)/.exec(r[pair] || '');
+      if (m) g = {type: 'Point', coordinates: [+m[2], +m[1]]};
+    }
+    if (!g) continue;
+    const props = {};
+    head.forEach((h, i) => { if (i !== wkt && r[i] != null && r[i] !== '') props[h] = r[i]; });
+    feats.push({type: 'Feature', geometry: g, properties: props});
+  }
+  return feats;
+}
+// Esri rings: clockwise rings are outlines, counter-clockwise ones are holes in
+// the outline before them.
+function ringsToGeom(rings){
+  const polys = [];
+  rings.forEach(r => {
+    let s = 0;
+    for (let i = 0; i < r.length - 1; i++) s += (r[i+1][0] - r[i][0]) * (r[i+1][1] + r[i][1]);
+    if (s >= 0 || !polys.length) polys.push([r]); else polys[polys.length - 1].push(r);
+  });
+  return polys.length === 1 ? {type: 'Polygon', coordinates: polys[0]} : {type: 'MultiPolygon', coordinates: polys};
+}
+function esriGeom(g){
+  if (!g) return null;
+  if (g.x != null) return {type: 'Point', coordinates: [g.x, g.y]};
+  if (g.points) return {type: 'MultiPoint', coordinates: g.points};
+  if (g.paths) return {type: 'MultiLineString', coordinates: g.paths};
+  if (g.rings) return ringsToGeom(g.rings);
+  return null;
+}
+function jsonFeatures(obj){
+  if (obj && Array.isArray(obj.routes)) throw new Error('that is a Route Mapper project; open it with Import file…');
+  if (obj.type === 'FeatureCollection') return obj.features || [];
+  if (obj.type === 'Feature') return [obj];
+  if (obj.type && (obj.coordinates || obj.geometries)) return [{type: 'Feature', geometry: obj, properties: {}}];
+  if (Array.isArray(obj.features))      // ArcGIS JSON, as ArcGIS REST and some exports write it
+    return obj.features.map(f => ({type: 'Feature', properties: f.attributes || {}, geometry: esriGeom(f.geometry)}));
+  throw new Error('that JSON is not GeoJSON or ArcGIS JSON');
+}
+function kmlFeatures(text){
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error('that KML could not be read');
+  const tags = (el, t) => [...el.getElementsByTagName(t)];
+  const coords = el => el.textContent.trim().split(/\s+/).map(t => t.split(',').slice(0, 2).map(Number))
+    .filter(c => c.length === 2 && isFinite(c[0]) && isFinite(c[1]));
+  return tags(doc, 'Placemark').map(pm => {
+    const props = {}, g = [];
+    const name = tags(pm, 'name')[0];
+    if (name) props.name = name.textContent.trim();
+    tags(pm, 'Data').forEach(d => { const v = tags(d, 'value')[0]; props[d.getAttribute('name')] = v ? v.textContent : ''; });
+    tags(pm, 'SimpleData').forEach(d => { props[d.getAttribute('name')] = d.textContent; });
+    tags(pm, 'Point').forEach(p => { const c = tags(p, 'coordinates')[0]; if (c && coords(c).length) g.push({type: 'Point', coordinates: coords(c)[0]}); });
+    tags(pm, 'LineString').forEach(l => { const c = tags(l, 'coordinates')[0]; if (c) g.push({type: 'LineString', coordinates: coords(c)}); });
+    tags(pm, 'Polygon').forEach(pg => {
+      const outer = tags(pg, 'outerBoundaryIs')[0];
+      if (!outer) return;
+      g.push({type: 'Polygon', coordinates: [coords(tags(outer, 'coordinates')[0]),
+        ...tags(pg, 'innerBoundaryIs').map(b => coords(tags(b, 'coordinates')[0]))]});
+    });
+    if (!g.length) return null;
+    return {type: 'Feature', properties: props, geometry: g.length === 1 ? g[0] : {type: 'GeometryCollection', geometries: g}};
+  }).filter(Boolean);
+}
+// A zip, read with the browser's own inflate (no library): returns name -> loader.
+async function unzip(buf){
+  const dv = new DataView(buf), files = {};
+  let e = buf.byteLength - 22;
+  while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error('that is not a zip file');
+  let p = dv.getUint32(e + 16, true);
+  for (let i = 0, n = dv.getUint16(e + 10, true); i < n; i++){
+    const method = dv.getUint16(p + 10, true), size = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true), skip = nameLen + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+    const local = dv.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(new Uint8Array(buf, p + 46, nameLen));
+    const data = new Uint8Array(buf, local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true), size);
+    files[name] = async () => method === 0 ? data : new Uint8Array(await new Response(
+      new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    p += 46 + skip;
+  }
+  return files;
+}
+function dbfRows(b){
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), dec = new TextDecoder('utf-8');
+  const n = dv.getUint32(4, true), headLen = dv.getUint16(8, true), recLen = dv.getUint16(10, true);
+  const fields = [];
+  for (let o = 32; o < headLen - 1 && b[o] !== 0x0D; o += 32)
+    fields.push({name: dec.decode(b.subarray(o, o + 11)).replace(/\0[\s\S]*$/, '').trim(), len: b[o + 16]});
+  const rows = [];
+  for (let r = 0; r < n; r++){
+    let o = headLen + r * recLen + 1;
+    const row = {};
+    for (const f of fields){ const v = dec.decode(b.subarray(o, o + f.len)).trim(); if (v) row[f.name] = v; o += f.len; }
+    rows.push(row);
+  }
+  return rows;
+}
+function shpFeatures(shp, dbf, prj){
+  if (/PROJCS/i.test(prj) && !/Mercator_Auxiliary_Sphere|Web_Mercator|Pseudo.Mercator|Popular Visualisation/i.test(prj))
+    throw new Error('this shapefile is in a projected coordinate system (' + ((/PROJCS\["([^"]+)"/.exec(prj) || [])[1] || 'unknown')
+      + '). In ArcGIS, export it in WGS 1984 or as GeoJSON, then load that');
+  const dv = new DataView(shp.buffer, shp.byteOffset, shp.byteLength);
+  const rows = dbf ? dbfRows(dbf) : [], feats = [];
+  const pt = o => [dv.getFloat64(o, true), dv.getFloat64(o + 8, true)];
+  for (let p = 100, k = 0; p + 12 <= dv.byteLength; k++){
+    const len = dv.getInt32(p + 4) * 2, s = p + 8, type = dv.getInt32(s, true), base = type % 10;
+    let g = null;
+    if (type === 31) g = null;                                   // multipatch: not drawable here
+    else if (base === 1) g = {type: 'Point', coordinates: pt(s + 4)};
+    else if (base === 8){
+      const n = dv.getInt32(s + 36, true), pts = [];
+      for (let i = 0; i < n; i++) pts.push(pt(s + 40 + i * 16));
+      g = {type: 'MultiPoint', coordinates: pts};
+    } else if (base === 3 || base === 5){
+      const np = dv.getInt32(s + 36, true), n = dv.getInt32(s + 40, true), parts = [], pts = [];
+      for (let i = 0; i < np; i++) parts.push(dv.getInt32(s + 44 + i * 4, true));
+      for (let i = 0; i < n; i++) pts.push(pt(s + 44 + np * 4 + i * 16));
+      const rings = parts.map((b, i) => pts.slice(b, i + 1 < np ? parts[i + 1] : n));
+      g = base === 5 ? ringsToGeom(rings)
+        : rings.length === 1 ? {type: 'LineString', coordinates: rings[0]} : {type: 'MultiLineString', coordinates: rings};
+    }
+    if (g) feats.push({type: 'Feature', geometry: g, properties: rows[k] || {}});
+    p = s + len;
+  }
+  return feats;
+}
+async function zipFeatures(buf){
+  const files = await unzip(buf), names = Object.keys(files).filter(n => !/__MACOSX|\/\._/.test(n));
+  const text = async n => new TextDecoder().decode(await files[n]());
+  const kml = names.find(n => /\.kml$/i.test(n));                 // a KMZ is a zipped KML
+  const shp = names.find(n => /\.shp$/i.test(n));
+  if (!shp){
+    if (kml) return kmlFeatures(await text(kml));
+    const js = names.find(n => /\.(geo)?json$/i.test(n));
+    if (js) return jsonFeatures(JSON.parse(await text(js)));
+    throw new Error('no shapefile (.shp), KML or GeoJSON in that zip');
+  }
+  const base = shp.slice(0, -4).toLowerCase(), sib = ext => names.find(n => n.toLowerCase() === base + ext);
+  return shpFeatures(await files[shp](), sib('.dbf') ? await files[sib('.dbf')]() : null,
+                     sib('.prj') ? await text(sib('.prj')) : '');
+}
+// Everything ends up as GeoJSON in longitude/latitude. Web Mercator metres (what
+// ArcGIS Online often exports) are converted; anything else is refused rather than
+// drawn in the wrong place.
+function mapCoords(g, f){
+  if (!g) return g;
+  if (g.type === 'GeometryCollection') return {...g, geometries: g.geometries.map(x => mapCoords(x, f))};
+  const walk = c => typeof c[0] === 'number' ? f(c) : c.map(walk);
+  return {...g, coordinates: walk(g.coordinates)};
+}
+function firstCoord(g){
+  if (!g) return null;
+  if (g.type === 'GeometryCollection') return g.geometries.map(firstCoord).find(Boolean) || null;
+  let c = g.coordinates;
+  while (Array.isArray(c) && Array.isArray(c[0])) c = c[0];
+  return Array.isArray(c) && typeof c[0] === 'number' ? c : null;
+}
+const fromMercator = ([x, y]) => [x / 20037508.34 * 180, Math.atan(Math.exp(y / 6378137)) * 360 / Math.PI - 90];
+function lngLatFeatures(feats){
+  feats = feats.filter(f => f && f.geometry && firstCoord(f.geometry));
+  const c = feats.length && firstCoord(feats[0].geometry);
+  if (!c) return [];
+  if (Math.abs(c[0]) <= 180 && Math.abs(c[1]) <= 90) return feats;
+  if (Math.abs(c[0]) <= 20037509 && Math.abs(c[1]) <= 20037509)
+    return feats.map(f => ({...f, geometry: mapCoords(f.geometry, fromMercator)}));
+  throw new Error('its coordinates are not in WGS 1984 or Web Mercator. Export it in WGS 1984 (or as GeoJSON) and load that');
+}
+async function loadRefFile(file){
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  let feats;
+  if (ext === 'csv' || ext === 'txt') feats = csvFeatures(await file.text());
+  else if (ext === 'geojson' || ext === 'json') feats = jsonFeatures(JSON.parse(await file.text()));
+  else if (ext === 'kml') feats = kmlFeatures(await file.text());
+  else if (ext === 'zip' || ext === 'kmz') feats = await zipFeatures(await file.arrayBuffer());
+  else throw new Error('Route Mapper reads CSV, GeoJSON, KML/KMZ and zipped shapefiles');
+  feats = lngLatFeatures(feats);
+  if (!feats.length) throw new Error('no locations found in it');
+  const ref = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: file.name.replace(/\.[^.]+$/, ''), color: REF_COLORS[refs.length % REF_COLORS.length],
+    visible: true, by: null, features: feats};
+  refs.push(ref);
+  drawRefs(); saveRefs();
+  zoomToRef(ref);
+  note('Loaded ' + feats.length.toLocaleString() + ' features from ' + file.name + '. Click one for its details.');
+}
+function zoomToRef(ref){
+  const b = L.geoJSON({type: 'FeatureCollection', features: ref.features}).getBounds();
+  if (b.isValid()) map.fitBounds(b.pad(0.05));
+}
+// Fields worth colouring by: ones with between 2 and 20 different values.
+function refFields(ref){
+  const seen = {};
+  for (const f of ref.features.slice(0, 5000))
+    for (const [k, v] of Object.entries(f.properties || {})){
+      const s = seen[k] || (seen[k] = new Set());
+      if (s.size <= 20) s.add(String(v));
+    }
+  return Object.keys(seen).filter(k => seen[k].size > 1 && seen[k].size <= 20);
+}
+const refValue = (ref, f) => String((f.properties || {})[ref.by] ?? '');
+const refValues = ref => ref.by ? [...new Set(ref.features.map(f => refValue(ref, f)))].sort() : [];
+function refPopup(ref, f){
+  const rows = Object.entries(f.properties || {}).filter(([, v]) => v !== '' && v != null).slice(0, 14);
+  return '<div class="refpop"><b>' + esc(ref.name) + '</b>' + (rows.length ? '<table>'
+    + rows.map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + esc(v) + '</td></tr>').join('') + '</table>' : '') + '</div>';
+}
+function drawRefs(){
+  refGroup.clearLayers();
+  refs.forEach(ref => {
+    if (!ref.visible) return;
+    const vals = refValues(ref);
+    const colorOf = f => ref.by ? REF_COLORS[vals.indexOf(refValue(ref, f)) % REF_COLORS.length] : ref.color;
+    L.geoJSON({type: 'FeatureCollection', features: ref.features}, {
+      pane: 'refPane', renderer: refRenderer,
+      pointToLayer: (f, ll) => L.circleMarker(ll, {pane: 'refPane', renderer: refRenderer, radius: 3.5,
+        weight: 1, color: '#fff', fillColor: colorOf(f), fillOpacity: .9}),
+      style: f => ({color: colorOf(f), weight: 2.5, opacity: .9, fillColor: colorOf(f), fillOpacity: .1}),
+      onEachFeature: (f, lyr) => lyr.on('click', e => {
+        // While drawing, a click on a meter is just a click on the map.
+        if (tool !== 'none') return;
+        L.popup({maxWidth: 340}).setLatLng(e.latlng).setContent(refPopup(ref, f)).openOn(map);
+      }),
+    }).addTo(refGroup);
+  });
+  renderRefList();
+}
+function renderRefList(){
+  const host = $('#refs');
+  host.innerHTML = '';
+  refs.forEach(ref => {
+    const fields = refFields(ref), vals = refValues(ref);
+    const d = document.createElement('div'); d.className = 'ref';
+    d.innerHTML = '<div class="refhead">'
+      + '<input type="checkbox"' + (ref.visible ? ' checked' : '') + ' title="Show or hide">'
+      + '<input type="color" value="' + esc(ref.color) + '" title="Colour"' + (ref.by ? ' disabled' : '') + '>'
+      + '<span class="refname" title="' + esc(ref.name) + '">' + esc(ref.name) + '</span>'
+      + '<span class="refcount num">' + ref.features.length.toLocaleString() + '</span>'
+      + '<button class="mini" title="Zoom to it">◎</button><button class="mini" title="Remove">×</button></div>'
+      + (fields.length ? '<label class="refby">Colour by <select><option value="">one colour</option>'
+        + fields.map(k => '<option' + (k === ref.by ? ' selected' : '') + '>' + esc(k) + '</option>').join('')
+        + '</select></label>' : '')
+      + (ref.by ? '<div class="reflegend">' + vals.map((v, i) => '<span><i style="background:'
+        + REF_COLORS[i % REF_COLORS.length] + '"></i>' + esc(v || '(blank)') + '</span>').join('') + '</div>' : '');
+    const [vis, col] = d.querySelectorAll('input'), [zoom, del] = d.querySelectorAll('button');
+    const by = d.querySelector('select');
+    vis.onchange = () => { ref.visible = vis.checked; drawRefs(); saveRefs(); };
+    col.onchange = () => { ref.color = col.value; drawRefs(); saveRefs(); };
+    zoom.onclick = () => zoomToRef(ref);
+    del.onclick = () => { refs = refs.filter(x => x !== ref); drawRefs(); saveRefs(); };
+    if (by) by.onchange = () => { ref.by = by.value || null; drawRefs(); saveRefs(); };
+    host.appendChild(d);
+  });
+}
+// Kept in this browser between sessions, in IndexedDB because a meters file can be
+// bigger than localStorage allows. If that fails nothing breaks; the layers just
+// need loading again next time.
+function refDB(){
+  return new Promise((ok, no) => {
+    const r = indexedDB.open('route-mapper', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
+  });
+}
+async function saveRefs(){
+  try { (await refDB()).transaction('kv', 'readwrite').objectStore('kv').put(refs, 'refs'); } catch (e) {}
+}
+async function loadRefs(){
+  try {
+    const db = await refDB();
+    const got = await new Promise((ok, no) => {
+      const q = db.transaction('kv').objectStore('kv').get('refs');
+      q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error);
+    });
+    if (Array.isArray(got) && got.length){ refs = got; drawRefs(); }
+  } catch (e) {}
+}
+async function addRefFiles(files){
+  for (const f of files){
+    try { await loadRefFile(f); }
+    catch (err) { note('Could not load ' + f.name + ': ' + err.message + '.', true); }
+  }
+}
+$('#bRef').onclick = () => $('#refIn').click();
+$('#refIn').onchange = e => { const files = [...e.target.files]; e.target.value = ''; addRefFiles(files); };
+// Files dropped on the map load as reference layers too.
+map.getContainer().addEventListener('dragover', e => e.preventDefault());
+map.getContainer().addEventListener('drop', e => {
+  e.preventDefault();
+  if (e.dataTransfer && e.dataTransfer.files.length) addRefFiles([...e.dataTransfer.files]);
+});
+// ---- end of reference layers --------------------------------------------------
 
 async function api(path, opts){
   const r = await fetch(path, opts);
@@ -1670,215 +2079,104 @@ function translateSeg(route, seg, dLat, dLng){
 const SNAP_PX = 16;
 let showArrows = true;
 
-// ---- adding missed blocks --------------------------------------------------
-// You draw the missed blocks as a path; nothing changes until you finish, then
-// the path is stitched into the walk where it touches the route, so it is one
-// step to undo. Where it goes:
-//  - Start (or finish) on the route and the new blocks branch off at exactly that
-//    point. A block that the point falls in the middle of is cut in two.
-//  - Come back to the point you left from and they form a loop there.
-//  - Come back further along and they rejoin there. If the stretch they skip has
-//    no counted blocks it is replaced. If it does, it is kept: the new blocks are
-//    walked back from its far end and a walking leg follows the street on to
-//    where the walk carries on, so nothing is dropped and no leg runs against
-//    the walk.
-//  - Touch the route at neither end and they go after the block whose ＋ you
-//    clicked (or the nearest point on the route), with walking legs out and back.
-// The first version added each leg straight after the ＋ block as you clicked,
-// which numbered detours from the middle of a block in the wrong place and drew
-// connecting legs back over the route against the walk.
-const ATTACH_PX = 16;
-let ins = null;   // {route, anchor (uid | '^' | null), path: [[lat, lng]...], kinds: [...]}
-// Close enough to be the same spot on the street: within a fingertip on screen
-// or 15 m on the ground. Coming back to a corner and clicking a little to one
-// side of it would otherwise cut a sliver off the block there.
-const sameSpot = (a, b) => samePt(a, b) || near(a, b) || map.distance(a, b) < 15;
-function startInsert(ri, anchor, pen){
-  if (ins) finishInsert();
-  activeRoute = ri; selected = null;
-  ins = {route: P.routes[ri].uid, anchor: anchor || null, path: pen ? [pen.slice()] : [], kinds: []};
-  if (tool !== 'count' && tool !== 'walk') setTool('count');
+// ---- inserting a block ---------------------------------------------------------
+// Works like editing a line in ArcGIS Online. While "Insert a block" is on, each
+// straight stretch of every leg on the route you're working on shows a white
+// handle at its middle. Drag one, or just click it, to add a point there: the leg
+// splits in two at that point, the second half becomes the next block, and the IDs
+// after it renumber. Drop the new point on another corner to join up there. Hold
+// Alt/Option while dragging to bend the leg at the new point without adding a
+// block. Everything stays one continuous line, so the arrows keep agreeing.
+// This replaced "Add missed blocks" (Nov 2026), which had you draw a separate path
+// for the tool to stitch in and too often put it in the wrong place.
+let insertMode = false;
+function setInsertMode(on, uid){
+  if (on && tool !== 'none') setTool('none');
+  insertMode = on;
+  if (on && uid) selected = uid;
+  $('#hint').textContent = on
+    ? 'Insert a block: drag a white handle on a line, or click it, to add a point there. The block splits in two and '
+      + 'the IDs after it renumber. Alt-drag bends the line without adding a block. Esc when done.'
+    : 'Click a block on the map or in the list to edit it.';
   render();
 }
-function insLabel(uid){
-  if (uid === '^') return 'the start';
-  const seg = P.routes.flatMap(r => r.segments).find(sg => sg.uid === uid);
-  return seg ? (seg.inv_id || 'the walking leg') : 'the gap';
-}
-function updateInsBar(){
-  const bar = $('#insbar');
-  if (!ins){ bar.style.display = 'none'; return; }
-  bar.style.display = 'flex';
-  const n = ins.kinds.length;
-  $('#instext').textContent = !ins.path.length
-    ? 'Adding missed blocks' + (ins.anchor ? ' (after ' + insLabel(ins.anchor) + ' unless you start on the route)' : '')
-      + '. Click where they start; start on the route to branch off at that point.'
-    : 'Adding missed blocks · ' + n + (n === 1 ? ' leg' : ' legs') + '. Click the end of each block face'
-      + ' (C / W switch count and walk). Click back on the route to finish there, or press Done.'
-      + ' Backspace removes the last point.';
-}
-// Where on a route's walk a point lies: the leg (`idx` in walking order, `seg`
-// and `u` within it), how far along that leg (`t`, 0..1) and the point itself,
-// or null when it is more than `tol` px away (no limit if tol is null). Lands
-// exactly on a corner when close to one, so joints stay shared.
-function routePos(rt, pt, tol){
-  const c = map.latLngToContainerPoint(pt);
-  let best = null;
-  rt.segments.forEach((sg, idx) => {
-    if (sg.kind === 'lot' || sg.pts.length < 2) return;
-    const xy = sg.pts.map(q => map.latLngToContainerPoint(q));
-    const lens = xy.slice(1).map((b, i) => Math.hypot(b.x - xy[i].x, b.y - xy[i].y));
-    const total = lens.reduce((a, b) => a + b, 0) || 1;
-    let run = 0;
-    lens.forEach((len, i) => {
-      const a = xy[i], b = xy[i+1];
-      const u = len ? Math.max(0, Math.min(1, ((c.x-a.x)*(b.x-a.x) + (c.y-a.y)*(b.y-a.y)) / (len*len))) : 0;
-      const x = a.x + u*(b.x-a.x), y = a.y + u*(b.y-a.y), d = Math.hypot(c.x-x, c.y-y);
-      if (!best || d < best.d - 1e-9) best = {d, idx, uid: sg.uid, seg: i, u, t: (run + u*len) / total, x, y};
-      run += len;
-    });
-  });
-  if (!best || (tol != null && best.d > tol)) return null;
-  const sg = rt.segments[best.idx];
-  const k = sg.pts.findIndex(q => { const p = map.latLngToContainerPoint(q);
-    return Math.hypot(p.x - best.x, p.y - best.y) < 6; });
-  if (k >= 0){
-    best.pt = sg.pts[k].slice();
-    if (k === 0){ best.seg = 0; best.u = 0; best.t = 0; }
-    else if (k === sg.pts.length - 1){ best.seg = k - 1; best.u = 1; best.t = 1; }
-  } else {
-    const ll = map.containerPointToLatLng(L.point(best.x, best.y));
-    best.pt = [ll.lat, ll.lng];
-  }
-  return best;
-}
-// Cut the route at a point on it. Returns the uid of the leg that now ends
-// there, or '^' when the point is the very start of the walk. A cut block keeps
-// its ID and details on the first half; the second half is a new block on the
-// same street (so it gets the next ID). Lots tied to it are re-tied to the half
-// they sit by.
-function cutAt(rt, pos){
-  const sg = rt.segments.find(s => s.uid === pos.uid);
-  const pts = sg.pts;
-  if (samePt(pos.pt, pts[pts.length-1])) return sg.uid;
-  const at = rt.segments.indexOf(sg);
-  if (samePt(pos.pt, pts[0])){
-    const prev = rt.segments.slice(0, at).reverse().find(s => s.kind !== 'lot' && s.pts.length >= 2);
-    return prev ? prev.uid : '^';
-  }
-  const k = pts.findIndex(q => samePt(q, pos.pt));
-  const head = k > 0 ? pts.slice(0, k + 1) : pts.slice(0, pos.seg + 1).concat([pos.pt]);
-  const tail = k > 0 ? pts.slice(k) : [pos.pt].concat(pts.slice(pos.seg + 1));
-  const rest = mkSeg(sg.kind, tail.map(q => q.slice()));
-  rest.street = sg.street;
-  if (sg.is_route_end){ rest.is_route_end = true; sg.is_route_end = false; }
-  sg.pts = head.map(q => q.slice());
-  rt.segments.splice(at + 1, 0, rest);
+// Split a leg at a point on its stretch i: the first half keeps the leg (its ID,
+// space count, flags), the second half is a new block on the same street. Lots
+// tied to the leg re-tie to whichever half they sit by.
+function splitLegAt(rt, seg, i, pt){
+  const rest = mkSeg(seg.kind, [pt.slice()].concat(seg.pts.slice(i + 1).map(q => q.slice())));
+  rest.street = seg.street;
+  if (seg.is_route_end){ rest.is_route_end = true; seg.is_route_end = false; }
+  seg.pts = seg.pts.slice(0, i + 1).concat([pt.slice()]);
+  rt.segments.splice(rt.segments.indexOf(seg) + 1, 0, rest);
   rt.segments.forEach(l => {
-    if (l.kind === 'lot' && l.anchor_leg === sg.uid && l.anchor) attachLot(rt, l, l.anchor);
+    if (l.kind === 'lot' && l.anchor_leg === seg.uid && l.anchor) attachLot(rt, l, l.anchor);
   });
-  return sg.uid;
+  return rest;
 }
-function insertClick(pt){
-  const rt = P.routes.find(r => r.uid === ins.route);
-  if (!rt) return finishInsert();
-  const last = ins.path[ins.path.length - 1];
-  if (last && near(pt, last)) return;               // the second click of a double-click
-  const on = routePos(rt, pt, ATTACH_PX);
-  let hit = on ? on.pt : pt;
-  // Back where you left the route: close the loop exactly.
-  if (on && ins.path.length && routePos(rt, ins.path[0], 1) && sameSpot(hit, ins.path[0])) hit = ins.path[0].slice();
-  ins.path.push(hit);
-  if (ins.path.length > 1) ins.kinds.push(tool);
-  if (on && ins.path.length > 1) return finishInsert();   // back on the route: done
-  drawDraft(); updateInsBar();
-}
-function undoInsertPoint(){
-  ins.path.pop();
-  ins.kinds.length = Math.max(0, ins.path.length - 1);
-  drawDraft(); updateInsBar();
-}
-// Stitch the drawn path into the walk (see the top of this section).
-function finishInsert(discard){
-  const s = ins; ins = null;
-  rubber.remove(); drawDraft(); updateInsBar();
-  if (discard || !s || s.path.length < 2) return render();
-  const rt = P.routes.find(r => r.uid === s.route);
-  if (!rt) return render();
-  const join = $('#insJoin').checked;
-  let path = s.path.map(q => q.slice()), kinds = s.kinds.slice();
-  const flip = () => { path.reverse(); kinds.reverse(); };
-  const first = () => path[0], lastPt = () => path[path.length - 1];
-  const legs = () => path.slice(1).map((q, i) => mkSeg(kinds[i], [path[i].slice(), q.slice()]));
-  const put = (afterUid, segs) => {
-    const i = afterUid === '^' ? 0 : rt.segments.findIndex(x => x.uid === afterUid) + 1;
-    rt.segments.splice(i, 0, ...segs);
-    return segs[segs.length - 1].uid;
-  };
-  const later = (p, q) => p.idx !== q.idx ? p.idx > q.idx : p.t > q.t;
-  let A = routePos(rt, first(), 1), B = routePos(rt, lastPt(), 1), how, added;
-
-  if (A && B && sameSpot(A.pt, B.pt)){
-    path[path.length - 1] = A.pt.slice();
-    how = 'as a loop from that point';
-    put(cutAt(rt, A), added = legs());
-  } else if (A && B){
-    if (later(A, B)){ flip(); A = routePos(rt, first(), 1); }
-    const xAfter = cutAt(rt, A);
-    const yAfter = cutAt(rt, routePos(rt, lastPt(), 1));   // after the first cut, so it finds the right half
-    const i0 = xAfter === '^' ? 0 : rt.segments.findIndex(x => x.uid === xAfter) + 1;
-    const i1 = rt.segments.findIndex(x => x.uid === yAfter) + 1;
-    const skipped = rt.segments.slice(i0, i1).filter(x => x.kind !== 'lot');
-    if (!skipped.some(x => x.kind === 'count')){
-      how = skipped.length ? 'in place of the walking leg they bypass' : 'between the blocks either side';
-      rt.segments = rt.segments.filter(x => !skipped.includes(x));
-      put(xAfter, added = legs());
-    } else {
-      // Keep the skipped blocks, walk the new ones back from their far end, then
-      // follow the street on to where the walk carries on.
-      flip();
-      const tail = put(yAfter, added = legs());
-      if (join) put(tail, [mkSeg('walk', skipped.flatMap((x, k) => k ? x.pts.slice(1) : x.pts).map(q => q.slice()))]);
-      how = () => 'after ' + insLabel(yAfter) + ', walked back round from there' + (join ? ' with a walking leg on' : '');
-    }
-  } else {
-    // One end on the route (a spur), or neither: go out from one point and back to it.
-    let at = A || B;
-    if (B && !A) flip();
-    if (!at){
-      const end = rt.segments.find(x => x.uid === s.anchor);
-      const firstLeg = rt.segments.find(x => x.kind !== 'lot' && x.pts.length >= 2);
-      const anchorPt = s.anchor === '^' ? firstLeg && firstLeg.pts[0]
-        : end && end.kind !== 'lot' ? end.pts[end.pts.length - 1] : null;
-      at = anchorPt ? routePos(rt, anchorPt, 1) : routePos(rt, first(), null);
-      if (at && !anchorPt){
-        const other = routePos(rt, lastPt(), null);
-        if (other && other.d < at.d) at = other;
-      }
-    }
-    if (!at){ rt.segments.push(...(added = legs())); how = 'at the end'; }
-    else {
-      const d = q => map.distance(at.pt, q);
-      if (d(lastPt()) < d(first())) flip();          // start from the end nearer the route
-      const segs = added = legs();
-      if (join && !samePt(at.pt, first())) segs.unshift(mkSeg('walk', [at.pt.slice(), first().slice()]));
-      if (join && !samePt(at.pt, lastPt())) segs.push(mkSeg('walk', [lastPt().slice(), at.pt.slice()]));
-      const xAfter = cutAt(rt, at);
-      put(xAfter, segs);
-      const outBack = join && segs.length > added.length ? ', with walking legs out and back' : '';
-      how = () => (A || B ? 'from that point' : 'after ' + insLabel(xAfter)) + outBack;
-    }
+function insertPoint(rt, seg, i, dropped, bendOnly){
+  const pt = snapTarget(dropped, seg) || dropped;
+  if (bendOnly){
+    seg.pts.splice(i + 1, 0, pt.slice());
+    return push().then(() => note('Bent ' + (seg.inv_id || 'the walking leg') + ' at the new point; no block added.'));
   }
-  const uids = added.map(x => x.uid);
+  const rest = splitLegAt(rt, seg, i, pt);
+  selected = rest.uid;
   push().then(() => {
-    const r = P.routes.find(x => x.uid === s.route);
-    const ids = r ? r.segments.filter(x => uids.includes(x.uid) && x.inv_id).map(x => x.inv_id) : [];
-    note((ids.length ? 'Added ' + (ids.length > 1 ? ids[0] + '–' + ids[ids.length-1] : ids[0])
-                     : 'Added the walking legs') + ' ' + (typeof how === 'function' ? how() : how)
-         + '. Everything after renumbered.');
+    const r = P.routes.find(x => x.uid === rt.uid) || rt;
+    const id = u => (r.segments.find(x => x.uid === u) || {}).inv_id;
+    const a = id(seg.uid), b = id(rest.uid);
+    note(b ? 'Inserted ' + b + ' after ' + a + '; the IDs after it renumbered. Drag the new point to shape it.'
+           : 'Split the walking leg. Drag the new point to shape it.');
   });
 }
-// ---- end of adding missed blocks ------------------------------------------
+function drawMidHandles(rt, lines){
+  rt.segments.forEach(seg => {
+    if (seg.kind === 'lot' || seg.pts.length < 2) return;
+    for (let i = 0; i < seg.pts.length - 1; i++){
+      const a = seg.pts[i], b = seg.pts[i + 1];
+      if (samePt(a, b)) continue;
+      const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], line = lines[seg.uid];
+      // A block's ID badge sits at its middle, right where this handle would go
+      // and on top of it, so move the handle along the line clear of the badge.
+      let at = mid;
+      if (seg.label_at){
+        const ca = map.latLngToContainerPoint(a), cb = map.latLngToContainerPoint(b);
+        const cm = map.latLngToContainerPoint(mid), cl = map.latLngToContainerPoint(seg.label_at);
+        const len = Math.hypot(cb.x - ca.x, cb.y - ca.y);
+        if (Math.hypot(cl.x - cm.x, cl.y - cm.y) < 20 && len > 70){
+          const k = 26 / len, ll = map.containerPointToLatLng(L.point(cm.x - (cb.x - ca.x) * k, cm.y - (cb.y - ca.y) * k));
+          at = [ll.lat, ll.lng];
+        }
+      }
+      const h = L.marker(at, {draggable: true, zIndexOffset: 450, icon: L.divIcon({className: '',
+        iconSize: [13, 13], html: '<div class="midpt" style="border-color:' + esc(rt.color) + '"></div>'})})
+        .bindTooltip(seg.inv_id ? 'Drag or click to insert a block in ' + esc(seg.inv_id)
+                                : 'Drag or click to add a point to this walking leg').addTo(layer);
+      h.on('dragstart', () => { dragging = true; });
+      h.on('drag', ev => {
+        if (!line) return;
+        const ll = ev.target.getLatLng(), pts = seg.pts.map(q => q.slice());
+        pts.splice(i + 1, 0, [ll.lat, ll.lng]);
+        line.setLatLngs(pts);
+      });
+      h.on('dragend', ev => {
+        const ll = ev.target.getLatLng();
+        insertPoint(rt, seg, i, [ll.lat, ll.lng], breakAway);
+        setTimeout(() => { dragging = false; }, 0);      // swallow the click that ends a drag
+      });
+      h.on('click', ev => { L.DomEvent.stop(ev); if (!dragging) insertPoint(rt, seg, i, at, false); });
+    }
+  });
+}
+// Reverse one block so its arrows point the other way (F). Its ID stays; its two
+// ends swap, so drag its blue end tabs if it should now join up differently.
+function flipLeg(rt, seg){
+  if (seg.kind === 'lot') return;
+  seg.pts.reverse();
+  push().then(() => note('Flipped ' + (seg.inv_id || 'the walking leg') + '; its arrows now point the other way.'));
+}
+// ---- end of inserting a block --------------------------------------------------
 function snapTarget(pt, ignoreSeg){
   if (!snapOn) return null;
   const c = map.latLngToContainerPoint(pt);
@@ -1930,10 +2228,6 @@ function snapSeg(route, seg){
 }
 function samePt(a, b){
   return a && b && Math.abs(a[0]-b[0]) < 1e-9 && Math.abs(a[1]-b[1]) < 1e-9;
-}
-// I on a selected joint: start adding missed blocks from that joint, pen down.
-function continueFromVertex(pt){
-  startInsert(activeRoute, null, pt);
 }
 // Removing a joint means the two legs that met there become one leg.
 function dissolveVertex(pt){
@@ -2005,7 +2299,6 @@ map.on('click', e => {
   // Clicking empty map lets go of the selection, which also hides a lot's line.
   if (tool === 'none' && selected){ selected = null; return render(); }
   if (tool === 'count' || tool === 'walk'){
-    if (ins) return insertClick(pt);
     const rt = R();
     const prev = lastVertex();
     if (!prev){ rt.start = pt; return push(); }
@@ -2013,10 +2306,9 @@ map.on('click', e => {
     return push();
   }
 });
-map.on('dblclick', () => { if (tool === 'lot') finishLot(); else if (ins) finishInsert(); });
+map.on('dblclick', () => { if (tool === 'lot') finishLot(); });
 map.on('mousemove', e => {
-  const from = P && (tool === 'count' || tool === 'walk')
-    && (ins ? ins.path[ins.path.length - 1] : lastVertex());
+  const from = P && (tool === 'count' || tool === 'walk') && lastVertex();
   if (!from) return rubber.remove();
   rubber.setLatLngs([from, e.latlng]);
   if (!map.hasLayer(rubber)) rubber.addTo(map);
@@ -2244,14 +2536,6 @@ function drawDraft(){
       color:'#fff', weight:2, fillColor:'#5AA9F2', fillOpacity:1})
       .bindTooltip(i === 0 ? 'Click here again to close the shape' : '').addTo(draft));
   }
-  // Missed blocks being drawn: solid for counted, dashed for walking, as they
-  // will look once added. Nothing is in the route until you finish.
-  if (ins && ins.path.length){
-    ins.kinds.forEach((k, i) => L.polyline([ins.path[i], ins.path[i+1]], {color:'#5AA9F2',
-      weight: k === 'count' ? 6 : 3, dashArray: k === 'count' ? null : '9 8', interactive:false}).addTo(draft));
-    ins.path.forEach((pt, i) => L.circleMarker(pt, {radius: i === 0 ? 6 : 4, color:'#fff', weight:2,
-      fillColor:'#5AA9F2', fillOpacity:1, interactive:false}).addTo(draft));
-  }
   updateLotBar();
 }
 function updateLotBar(){
@@ -2266,9 +2550,7 @@ function updateLotBar(){
 function setTool(t){
   if (tool === 'lot' && t !== 'lot' && lotPts.length >= 3) finishLot();
   if (t === 'lot' && tool !== 'lot') toolBeforeLot = tool;
-  // Count and Walk keep an insert going (you switch between them mid-insert);
-  // any other tool ends it.
-  if (ins && t !== 'count' && t !== 'walk') finishInsert();
+  if (t !== 'none') insertMode = false;          // drawing tools end Insert a block
   if (t !== 'count' && t !== 'walk') rubber.remove();
   tool = t;
   document.querySelectorAll('.tool').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
@@ -2283,23 +2565,16 @@ function setTool(t){
     none:'Click a block on the map or in the list to edit it.'};
   $('#hint').textContent = hints[t];
   if (t !== 'lot'){ lotPts = []; lotFor = null; }
-  drawDraft(); updateInsBar();
+  drawDraft();
 }
 document.querySelectorAll('.tool').forEach(b => b.onclick = () => setTool(b.dataset.tool));
 $('#optSnap').onchange = e => { snapOn = e.target.checked; };
 $('#optJoints').onchange = e => { jointsOn = e.target.checked; };
 $('#lotfinish').onclick = () => finishLot();
-$('#insdone').onclick = () => finishInsert();
-$('#inscancel').onclick = () => finishInsert(true);
 $('#lotcancel').onclick = () => { lotPts = []; lotFor = null; setTool('lot'); };
 document.addEventListener('keyup', e => { if (!e.altKey) breakAway = false; });
 document.addEventListener('keydown', e => {
   if (e.altKey) breakAway = true;
-  if (ins && (e.key === 'Backspace' || e.key === 'Delete')
-      && !['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)){
-    e.preventDefault();
-    return undoInsertPoint();          // while adding missed blocks, take back the last point
-  }
   // Click a corner handle, press Delete, and the joint goes - the two legs it
   // separated are merged into one.
   if ((e.key === 'Delete' || e.key === 'Backspace') && selVertex
@@ -2312,11 +2587,15 @@ document.addEventListener('keydown', e => {
   if (e.key === 'p'){ showPts = !showPts; return render(); }
   if (e.key === 'a'){ showArrows = !showArrows; drawArrows();
     return note(showArrows ? 'Direction arrows on' : 'Direction arrows off'); }
-  if (e.key === 'i' && selVertex){ return continueFromVertex(selVertex); }
+  if (e.key === 'i') return setInsertMode(!insertMode);
+  if (e.key === 'f' && selected){
+    const seg = R().segments.find(x => x.uid === selected);
+    if (seg && seg.kind !== 'lot') return flipLeg(R(), seg);
+  }
   if (e.key === 'c') setTool('count');
   else if (e.key === 'w') setTool('walk');
   else if (e.key === 'l') setTool('lot');
-  else if (e.key === 'Escape') setTool('none');      // also finishes an insert
+  else if (e.key === 'Escape'){ insertMode = false; setTool('none'); render(); }
   else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z'){
     e.preventDefault();
     (e.shiftKey ? redo() : undo());
@@ -2341,13 +2620,10 @@ function render(){
       else if (tool === 'flag'){ seg.flagged = !seg.flagged; push(); }
       else { activeRoute = ri; selected = seg.uid; render(); scrollToSel(); }
     };
-    let selSeg = null, selLine = null;
+    let selSeg = null, selLine = null; const lines = {};
     rt.segments.forEach(seg => {
       if (seg.pts.length < 2) return;
       const dim = ri === activeRoute ? 1 : .45;
-      // Until you start drawing, light up the block whose ＋ you clicked.
-      if (ins && !ins.path.length && seg.uid === ins.anchor && seg.kind !== 'lot')
-        L.polyline(seg.pts, {color:'#5AA9F2', weight:15, opacity:.4, interactive:false}).addTo(layer);
       if (seg.kind === 'lot'){
         // Solid outline, matching the route colour, so lots read as counted area.
         L.polygon(seg.pts, {color: rt.color, weight: 3, opacity: dim,
@@ -2357,6 +2633,7 @@ function render(){
         const line = L.polyline(seg.pts, {color: rt.color, weight: seg.kind === 'count' ? 6 : 3,
           opacity: dim, dashArray: seg.kind === 'count' ? null : '9 8'})
           .on('click', ev => pick(seg, ev)).addTo(layer);
+        lines[seg.uid] = line;
         if (seg.uid === selected){ selSeg = seg; selLine = line; }
       }
       if (seg.inv_id && seg.label_at){
@@ -2410,7 +2687,8 @@ function render(){
         });
       }));
     }
-    if (selSeg && tool !== 'lot' && !ins) drawEndTabs(rt, selSeg, selLine);
+    if (insertMode && ri === activeRoute) drawMidHandles(rt, lines);
+    if (selSeg && tool !== 'lot') drawEndTabs(rt, selSeg, selLine);
     // Endpoints take the route's own colour so you can tell three routes apart.
     // S is a solid disc, E carries an inner ring.
     const endpoint = (pt, glyph, label) => {
@@ -2446,7 +2724,7 @@ function render(){
     const b = document.createElement('button');
     b.className = 'tab' + (i === activeRoute ? ' on' : '');
     b.innerHTML = '<span class="dot" style="background:'+esc(rt.color)+'"></span>'+esc(rt.name);
-    b.onclick = () => { if (ins) finishInsert(); activeRoute = i; selected = null; render(); };
+    b.onclick = () => { activeRoute = i; selected = null; render(); };
     b.oncontextmenu = ev => { ev.preventDefault(); rt.visible = !rt.visible; push(); };
     b.title = rt.visible ? 'Right-click to hide this route' : 'Hidden — right-click to show';
     if (!rt.visible) b.style.opacity = .45;
@@ -2466,7 +2744,7 @@ function render(){
     row('Total distance', t.total_mi + ' mi', true) +
     row('Block faces', t.blocks) + lotsRow(t) + row('Spaces', t.spaces) +
     row('Counting', fmtMin(t.count_min) + ' · ' + fmtFt(t.count_ft)) +
-    row('Connecting', fmtMin(t.walk_min) + ' · ' + fmtFt(t.walk_ft)) +
+    row('Walking only', fmtMin(t.walk_min) + ' · ' + fmtFt(t.walk_ft)) +
     row('Next ID', esc(t.next_id));
   const g = P.grand_totals;
   $('#gstats').innerHTML = row('Routes', g.routes) + row('Block faces', g.blocks) +
@@ -2474,7 +2752,6 @@ function render(){
     row('Time', fmtMin(g.total_min));
   $('#lotnote').style.display = g.lots ? 'block' : 'none';
 
-  updateInsBar();
   drawArrows();
   renderList();
 }
@@ -2501,10 +2778,11 @@ function renderList(){
       + 'Parking lots take an ID in the same sequence, at the point where their line meets the route.</p>';
     return;
   }
-  const top = document.createElement('button'); top.className = 'addgap';
-  top.textContent = '＋ Add missed blocks';
-  top.title = 'Draw them anywhere; start or finish on the route to place them exactly';
-  top.onclick = () => startInsert(P.routes.indexOf(rt), null);
+  const top = document.createElement('button'); top.className = 'addgap' + (insertMode ? ' on' : '');
+  top.textContent = insertMode ? '＋ Inserting: drag a white handle on a line. Click here or press Esc when done.'
+                               : '＋ Insert a block';
+  top.title = 'Shows a white handle on every line; drag or click one to add a point and split the block there (I)';
+  top.onclick = () => setInsertMode(!insertMode);
   host.appendChild(top);
   rt.segments.forEach((seg, i) => host.appendChild(blockRow(seg, i, rt)));
 }
@@ -2524,7 +2802,7 @@ function blockRow(seg, i, rt){
     ? 'lot · ' + Math.round(seg.area_sqft).toLocaleString() + ' sq ft · ' + sp + ' · not timed'
     : Math.round(seg.length_ft) + ' ft'
       + (seg.kind === 'count' ? ' · ' + sp + ' · ' + seg.minutes.toFixed(1) + ' min'
-                              : ' · walk ' + seg.minutes.toFixed(1) + ' min');
+                              : ' · walk only · ' + seg.minutes.toFixed(1) + ' min');
   head.innerHTML =
     '<span class="idtag num'+(seg.id_is_manual?' man':'')+'">'
       + esc(seg.inv_id || '—') + '</span>'
@@ -2542,8 +2820,8 @@ function blockRow(seg, i, rt){
   head.appendChild(mk('◎', 'Zoom to it on the map', '', () => {
     const b = L.latLngBounds(seg.pts); map.fitBounds(b.pad(0.6)); }));
   if (!isLot)
-    head.appendChild(mk('＋', 'Add a missed block after this one', ' addafter',
-      () => startInsert(P.routes.indexOf(rt), seg.uid)));
+    head.appendChild(mk('＋', 'Insert a block in this one: turns on the white handles', ' addafter',
+      () => setInsertMode(true, seg.uid)));
   head.appendChild(mk('↑', 'Move earlier in the route', '', () => step(-1)));
   head.appendChild(mk('↓', 'Move later in the route', '', () => step(1)));
   // A tied lot's place comes from its line, so the arrows move the line: to the
@@ -2637,10 +2915,15 @@ function blockRow(seg, i, rt){
   const acts2 = document.createElement('div'); acts2.className = 'f2';
   if (!isLot){
     const cont = document.createElement('button'); cont.className = 'hbtn';
-    cont.textContent = 'Add a missed block after this';
-    cont.title = 'Blocks you draw next go in right after this one; the IDs after them renumber';
-    cont.onclick = () => startInsert(P.routes.indexOf(rt), seg.uid);
+    cont.textContent = 'Insert a block here';
+    cont.title = 'Shows the white handles: drag the one on this line to split it into two blocks';
+    cont.onclick = () => setInsertMode(true, seg.uid);
     acts2.appendChild(cont);
+    const flip = document.createElement('button'); flip.className = 'hbtn';
+    flip.textContent = 'Flip direction';
+    flip.title = 'Reverse this block so its arrows point the other way (F)';
+    flip.onclick = () => flipLeg(rt, seg);
+    acts2.appendChild(flip);
   }
 
   // Marking a block or lot as the route's own start or end. Useful when the walk
@@ -2722,6 +3005,13 @@ function drawArrows(){
   });
 }
 map.on('moveend', drawArrows);   // also fires after every zoom, so one listener is enough
+// The arrows point along the legs on screen, so they are redrawn as the map turns,
+// at most once a frame.
+let arrowFrame = 0;
+map.on('rotate', () => { cancelAnimationFrame(arrowFrame); arrowFrame = requestAnimationFrame(drawArrows); });
+// The insert handles keep clear of the ID badges by a few pixels, which changes
+// with the zoom.
+map.on('zoomend', () => { if (insertMode) render(); });
 
 function scrollToSel(){
   const el = document.querySelector('.blk.sel');
@@ -2991,7 +3281,7 @@ async function loadProjectList(){
 (async () => {
   P = await api('/api/state');
   if (P.center) map.setView(P.center, P.zoom || 15);
-  setTool('none'); render(); freshHistory(); loadProjectList();
+  setTool('none'); render(); freshHistory(); loadProjectList(); loadRefs();
 })();
 </script>
 </body>
