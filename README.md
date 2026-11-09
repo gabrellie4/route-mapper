@@ -1,4 +1,4 @@
-[README_route_mapper.md](https://github.com/user-attachments/files/34565731/README_route_mapper.md)
+[README_route_mapper.md](https://github.com/user-attachments/files/34596921/README_route_mapper.md)
 # Route Mapper
 
 A tool for laying out parking occupancy count routes and generating inventory IDs,
@@ -7,6 +7,11 @@ distances and walk-time estimates before the field work starts.
 ```
 python3 route_mapper.py
 ```
+
+On Windows you can double-click **Start Route Mapper (Windows).bat** instead (it runs
+`py route_mapper.py`). Each person runs their own copy on their own computer; the
+step-by-step setup for Windows and Mac, including installing Python, is in
+`docs/Route_Mapper_Workflow_v1.docx`. The map opens on all of Oakland.
 
 That's the whole install. Standard library only — no pip, no virtualenv. It starts a
 local server, opens your browser, and saves projects to `route_projects/` next to the
@@ -49,7 +54,7 @@ the snap option in the Draw panel if it gets in the way.
 first corner again, pressing `Enter`, or double-clicking. You can draw a lot while
 routing or add it afterwards.
 
-Each lot is tied to the route by a dotted line from its ID to an amber pin on the
+Each lot is tied to the route by a dotted line from its ID to a blue pin on the
 route. The pin marks where the lot is counted in the walk. The line only shows while
 the lot is selected (click the lot, or its row in the list); click empty map to hide
 it again. A new lot starts tied to the nearest point on the route, and its line is
@@ -90,44 +95,63 @@ To change a route after drawing it:
     to, and the IDs after it renumber.
 - Click a corner handle and press `Delete` to remove that joint; the two legs it
   separated merge into one.
-- **Missed blocks?** Click **＋** on a block's row (or **＋ Add missed blocks** at the
-  top of the list), then draw the missed blocks:
-  1. Click on the route where they branch off. A corner is best; a point partway along
-     a block cuts that block in two.
-  2. Click at the end of each missed block face. `C` and `W` switch between counting
-     and walking, and `Backspace` takes back the last point.
-  3. Click back on the route where the walk rejoins. That finishes it. You can also
-     press **Done**.
+- **Insert a block** (for a missed block, or to split one). Click **＋ Insert a block**
+  at the top of the list, press `I`, or click **＋** on a block's row. Every line on the
+  route gets a white handle near its middle, as when editing a line in ArcGIS Online.
+  Drag a handle, or just click it, to add a point there:
+  - The block splits in two at that point. The second half becomes the next block,
+    and the IDs after it renumber.
+  - Drag the new point wherever the walk should go. Drop it on another corner to join
+    up there. Keep adding points the same way to shape the route.
+  - Hold `Alt`/`Option` while dragging to bend the line at the new point without
+    adding a block.
 
-  Nothing in the route changes while you draw. When you finish, the blocks are stitched
-  into the walk where your path touched the route, numbered in walking order, and
-  everything after renumbers. It's one step to undo.
-  - **Back to where you started:** the blocks form a loop at that point. Clicking within
-    about 15 m counts as the same spot.
-  - **Rejoining further along:** what happens depends on the stretch you went around.
-    If it was only walking, the new blocks replace it. If it had counted blocks (for
-    example the frontage of a block you looped round), it's kept. The new blocks are
-    then walked back from its far end, and a dashed walking leg follows the street on
-    to where the walk continues. Nothing is dropped, and no leg points against the walk.
-  - **Ending away from the route:** the new blocks are a spur. A walking leg takes the
-    walk back to where it branched off.
-  - **Touching the route at neither end:** the new blocks go after the block whose ＋
-    you clicked, with walking legs out and back.
-
-  Untick **join up** to leave out those walking legs. **Discard** throws the drawing
-  away. You can also select a joint on the map and press `I` to start from exactly
-  there. ↑/↓ still move a single block (or a lot's pin) one place, which is handy for
-  fixing two blocks in the wrong order.
+  The route stays one continuous line, so its arrows keep agreeing. Press `Esc` or
+  click the button again when you're done. ↑/↓ still move a single block (or a lot's
+  pin) one place, which is handy for fixing two blocks in the wrong order.
+- **Flip direction** (on an open block's row, or `F` with the block selected) reverses
+  that one block so its arrows point the other way. It keeps its ID. Its two ends swap,
+  so drag its blue end tabs if it should now join up differently.
 - **Make this the END** / **Make this the START** lets a block face or lot stand in as
   the route's end or start. It keeps its own ID instead of getting a separate marker.
   Handy when the walk finishes in a parking lot.
 - **Reverse direction** in the Routes panel flips the walking order and renumbers
   every ID to match.
 - Right-click a route tab to hide or show that route.
+- **Rotate the map** by right-clicking and dragging on it, as in ArcGIS Online. Shift +
+  scroll also rotates. The compass button under the zoom buttons turns it back to north
+  up. Exports are always north up.
 
-Keys: `C` count · `W` walk · `L` lot · `A` direction arrows · `I` add blocks at the
-selected joint · `P` corner handles · `Esc` select (also finishes adding blocks) ·
-`⌘Z` undo · `⇧⌘Z` redo · `Delete` removes the selected block.
+Keys: `C` count · `W` walk · `L` lot · `A` direction arrows · `I` insert a block ·
+`F` flip the selected block · `P` corner handles · `Esc` select (also ends Insert a
+block) · `⌘Z` / `Ctrl+Z` undo · `⇧⌘Z` / `Ctrl+Shift+Z` redo · `Delete` removes the
+selected block.
+
+---
+
+## Reference layers
+
+Load other data to see what needs mapping, such as the City's parking meters, a
+study-area outline drawn in ArcGIS, or zone boundaries. Click **Add a layer…** in the
+left panel, or drop files onto the map. Route Mapper reads:
+
+- **CSV** with latitude and longitude columns (or a WKT geometry column such as
+  `the_geom`). The City of Oakland parking meters file loads as-is.
+- **GeoJSON**, and ArcGIS's own JSON.
+- **KML / KMZ**.
+- **Zipped shapefiles** in WGS 1984 or Web Mercator.
+
+From ArcGIS Online, open the layer's item page and choose **Export Data**. Pick
+GeoJSON, CSV, KML or Shapefile, then load what it downloads. Files in another
+projection, such as State Plane, are refused with a note to re-export in WGS 1984.
+
+Layers draw under the routes. Click a feature (with **Select / pan** on) to see its
+details. Each layer has a show/hide box, a colour, **Colour by** for fields with up to
+20 values (for example meter Zone or Area) with a small legend, a zoom button and a
+remove button. While you're drawing, clicking on a layer just draws the route there.
+
+Layers aren't part of the project and aren't saved in its file. They stay in your
+browser until you remove them, so on another computer, load them again there.
 
 ---
 
@@ -136,7 +160,7 @@ selected joint · `P` corner handles · `Esc` select (also finishes adding block
 Two things you asked for, and they interact:
 
 - **Individually** — click a block, type an ID in the first field. It's pinned, shows
-  amber, and everything after it continues from that number. Pin `2.14` and the next
+  blue, and everything after it continues from that number. Pin `2.14` and the next
   auto ID is `2.15`. Pin `1.9` and the next is `1.11`, because the skip rule still
   applies. "Back to auto ID" releases it.
 - **All at once** — change the zone number in the Routes panel and the whole route
@@ -151,8 +175,10 @@ conflict.
 
 The default follows your rule: a block face of about 10 spaces takes 2 minutes. Both
 halves are editable, so if the real pace turns out to be 3 minutes per 12 spaces you
-change it once and every route re-estimates. Connector legs are distance ÷ walking
-pace, default 260 ft/min (roughly 3 mph).
+change it once and every route re-estimates. **Walk-only** legs count their walking
+time, which is distance ÷ walking pace (default 260 ft/min, roughly 3 mph), but no
+counting time, and they get no ID. The route panel shows the two separately, as
+**Counting** and **Walking only**.
 
 Space counts are never guessed. Until the inventory survey gives you a real count, a
 block face is costed as one block of time (2 minutes by default). Its row says "not
