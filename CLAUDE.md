@@ -23,8 +23,8 @@ a `new_project()` with a few `new_segment()`s. When you run it from a script, us
 ## Files
 
 - `route_mapper.py` holds the whole server build. The UI is the raw string `HTML`
-  (from `HTML = r"""`, about line 1224, to the end of the module). A second template,
-  `VIEWER` (about line 835), backs the standalone HTML export.
+  (from `HTML = r"""`, about line 1314, to the end of the module). A second template,
+  `VIEWER` (about line 891), backs the standalone HTML export.
 - `README_route_mapper.md` is the user-facing documentation.
 - `Start Route Mapper (Windows).bat` is a double-click launcher (tries `py`, then
   `python`). It must keep CRLF line endings; `.gitattributes` pins that.
@@ -92,8 +92,14 @@ The data model is plain dicts and is JSON-serialisable:
   `visible`, `segments[]`
 - **segment**: `uid`, `kind`, `pts[]`, `spaces`, `manual_id`, `flagged`, `note`,
   `street`, plus the optional flags `is_route_start` / `is_route_end`. Lots may also
-  have `anchor_leg` / `anchor` (see Parking lots above). There is also `label_pos`,
+  have `anchor_leg` / `anchor` (see Parking lots above) and `minutes_manual` (minutes
+  a planner typed, replacing the suggested lot time). There is also `label_pos`,
   which `compute()` still reads but nothing sets any more.
+- **settings**: `minutes_per_block`, `spaces_per_block`, `ft_per_space`,
+  `lot_sqft_per_space`, `walk_speed_ft_per_min`, `skip_multiples_of_ten`.
+  `clean_settings()` fills missing keys from `DEFAULT_SETTINGS` and replaces null or
+  non-numeric values (an emptied box in the UI) with the default, so old projects and
+  half-typed settings both compute.
 
 `kind` is one of:
 
@@ -105,8 +111,9 @@ Old projects kept lots in a top-level `lots` list. `migrate()` folds them into t
 segment list. Lots saved before lot lines existed are untied and keep their list
 position until someone uses **Attach to the route**.
 
-**Derived fields must not be saved.** The UI's `strip()` (about line 2037) deletes them
+**Derived fields must not be saved.** The UI's `strip()` (about line 2154) deletes them
 before posting back. If you add a derived field to `compute()`, add it to `strip()` too.
+The newest ones are `spaces_est` and `minutes_suggested`.
 
 ## `IdSequence`: be careful here
 
@@ -134,25 +141,36 @@ Invariants in `compute()`:
 
 ## Timing and distance
 
-- A surveyed block takes `spaces / spaces_per_block × minutes_per_block`. The defaults
-  are 10 spaces and 2.0 min.
-- Space counts are never guessed. An unsurveyed block gets `spaces_known: False` and
-  costs exactly one block of time. `totals.unsurveyed` counts unsurveyed blocks and
-  lots.
+Every counted space costs `minutes_per_block / spaces_per_block` (0.2 min by default).
+The user asked (2026-11-09) for timing to follow each block's length, at 16 ft of curb
+per parking space, because block IDs vary in length and every unsurveyed block used
+to cost a flat 2 min.
+
+- A surveyed block takes `spaces × 0.2`.
+- An unsurveyed block (`spaces_known: False`) is timed by length:
+  `spaces_est = floor(length_ft / ft_per_space)`, then `spaces_est × 0.2`.
+- Either way a block takes at least `length_ft / walk_speed_ft_per_min` (the walk
+  floor), which matters only for long blocks with few spaces.
+- `spaces_est` is an estimate and must never read as a count. It is `None` once
+  spaces are entered. The UI shows it with ≈ and "est.". The CSV's SPACES stays blank
+  for unsurveyed blocks, and SPACES_SOURCE stays "not surveyed". `totals.spaces` is
+  entered counts only; `totals.spaces_est` sums the estimates.
 - Walk legs take distance ÷ `walk_speed_ft_per_min` (default 260, about 3 mph).
-- **Lots are not timed and add no distance.** Their `minutes` is `None`, not 0. Lot
-  time depends on aisle layout, levels and counting method, none of which the map
-  knows, and the block-face rate includes walking the curb. The user's rule
-  (2026-11-08): if lot time can't be estimated accurately, leave lots out and say so.
-  Don't add an estimate without asking.
-  Every place that shows totals says lots, and the walk into and around them, are
-  left out: the app's All routes panel
-  (`#lotnote`), the lot's row, and the viewer's header and sidebar. The CSV leaves
-  `EST_MINUTES` blank for lots. Its columns must not change, because they feed
-  Survey123.
+- **Lots get a suggested time and add no distance.** The user asked for it
+  (2026-11-09), reversing the 2026-11-08 rule that lots stay untimed.
+  - `minutes_suggested` = lot spaces × 0.2. Those are the surveyed spaces, or
+    `spaces_est = floor(area_sqft / lot_sqft_per_space)` (default 325).
+  - `minutes_manual`, when set, replaces it in `minutes`.
+  - Lot minutes go into `totals.lot_min` and `total_min`. `count_min` stays block
+    faces only.
+  - Every place that shows totals says lot times are suggestions: `#lotnote`, the
+    lot's row, and the viewer's header and sidebar. The PDF and SVG show no times.
 - `totals.blocks` counts block faces only. `totals.lots` and `totals.lot_spaces` count
-  lots. `totals.spaces` is block faces and lots together. `grand_totals` has the same
-  keys.
+  lots. `totals.spaces` is entered counts, block faces and lots together.
+  `totals.unsurveyed` counts unsurveyed blocks and lots. `grand_totals` has the same
+  keys, including `lot_min` and `spaces_est`.
+- The CSV's columns must not change, because they feed Survey123. A lot's
+  `EST_MINUTES` is now filled with its allowance.
 - Distances are great-circle (`haversine_ft`, `EARTH_RADIUS_FT = 20902231.0`) along
   the clicked vertices. They measure the drawn path, not the true curb line.
 
@@ -162,6 +180,22 @@ Invariants in `compute()`:
   `/api/projects`, `/api/load?name=`,
   `/api/export/{csv,gis,geojson,svg,pdf,viewer,json}`
 - `POST` `/api/state`, `/api/save`, `/api/new`
+
+Saving (`save_project()`):
+
+- `STATE["file"]` is the saved project the open one belongs to. `/api/load` and a
+  successful save set it; `/api/new` clears it. `/api/projects` returns it as
+  `current`.
+- `/api/save` takes `{project, force}`:
+  - `force: false` (Save, autosave and the closing-tab beacon all send it) refuses to
+    replace an existing file that isn't `STATE["file"]`. It replies
+    `{conflict: true, file, path}` and writes nothing.
+  - `force: true` writes anyway. The Save button asks with `confirm()` first.
+  - No `force` key at all keeps the old always-write behaviour for old pages and
+    scripts.
+- Writes go to `<name>.json.tmp` and are then `os.replace`d, under `SAVE_LOCK`.
+- Import calls `/api/new` before `/api/state`, so an imported file starts tied to
+  nothing and can't be autosaved over a saved project of the same name.
 
 Geocoding proxies to OpenStreetMap Nominatim with an identifying User-Agent, as
 their usage policy requires. The UI searches only on Enter: the policy forbids
@@ -189,8 +223,15 @@ search-as-you-type against the public server.
 - **SVG** has one named `<g>` layer per route, for Illustrator/Figma.
 - **PDF** is written byte by byte, with no reportlab.
 - **Standalone HTML viewer** fills `VIEWER` with computed data.
-- **Project JSON**.
+- **Project JSON**. This is the one to keep working from (the Export menu lists it
+  first under "To keep working later"); it reopens with Import file…. The UI builds
+  it in the browser from `strip(P)`, so it works even if the server has stopped.
+  `/api/export/json` still returns the same thing for scripts.
 - **PNG** is browser-side only: the UI draws the SVG onto a canvas at 2× size.
+
+The other server exports download through a temporary `<a download>` rather than
+`location.href`. A navigation would fire `beforeunload` and show "Leave site?" on
+every export while a save is pending.
 
 The SVG the UI downloads isn't the server's SVG as-is. `svgWithBasemap()` fetches map
 tiles using `/api/export/meta` (`svg_geometry()`) and inlines them at the
@@ -207,6 +248,35 @@ Free text (names, notes, manual IDs) is escaped everywhere it becomes markup:
   so the threaded server never ends up with an older project than the screen.
 - `freshHistory()` resets undo/redo after opening, importing or starting a project.
   Merging is an edit and goes through `push()`, so it can be undone.
+- **Autosave and leaving** (section `// ---- saving, autosave and leaving the page`):
+  - `push()` calls `edited()`, which bumps `editVer` and, with autosave on, starts a
+    1.5 s timer. Unsaved means `editVer !== savedVer`.
+  - `saveNow()` chains saves one at a time. Each save waits for `push()` to land
+    first.
+  - `markClean()` runs after New, Open, Import and the first load.
+  - `#savestate` in the footer shows the state persistently; `note()` is still the
+    transient message.
+  - `beforeunload` asks when there are unsaved edits, Shift-click bends or lot
+    corners in progress. `pagehide` sends a last `force: false` save with
+    `sendBeacon`.
+  - New, Open and Import call `okToReplace()`, which saves first or asks.
+  - The autosave on/off choice is in localStorage (`route-mapper-autosave`).
+- **Curved blocks** (`bendPts`, `finishBends`, `undoBend`, `updateBendBar`):
+  - In Count or Walk, a click with Shift (or Alt/Option) adds a bend to the leg being
+    drawn instead of ending it. The next plain click lays one leg through all the
+    bends.
+  - Enter ends at the last bend. Backspace or ⌘Z takes one back. Switching tools or
+    route tabs ends at the last bend.
+  - Leaflet's box zoom is disabled while Count or Walk is the tool, because it's
+    Shift-drag and a wobbly Shift-click would zoom.
+  - A plain click within 6 px of the last point no longer lays a tiny block.
+  - The user asked for curves (Nov 2026): clicking around a curve gave every bend
+    its own ID, and clicking only the ends cut the corner.
+- **Merge with next** (`mergeWithNext`, `M`): joins the next non-lot leg onto the
+  selected one, keeping every corner. They must meet end to start and be the same
+  kind. It keeps the first block's uid, ID and details, sums spaces, and re-ties lots
+  from the absorbed leg. This is how a curve already split into several IDs is fixed.
+  `dissolveVertex` (Delete on a joint) also merges but drops the shared corner.
 - **Separating and rejoining ends** (`drawEndTabs` / `rejoinEnd`): the selected leg
   gets two end tabs over the shared corners (corner handles move every leg at a
   point; tabs move one leg's end). On drop, `snapTarget` (ignoring the leg itself)
@@ -274,8 +344,11 @@ Free text (names, notes, manual IDs) is escaped everywhere it becomes markup:
 
 ## Known issues
 
-- The PDF and SVG plan sheets don't carry the "lots not timed" note, because they
-  show no times or distances.
+- The Pages build (`index.html` + `engine.js`, not in this repo) has none of the
+  2026-11-09 changes yet: length-based timing, the lot suggestion and
+  `minutes_manual`, `clean_settings`, curved blocks and merge, autosave and
+  `/api/save`'s `force`/`conflict`, and `/api/new` before import. Its fetch shim also
+  has to answer `/api/save` with `{saved, file}` or `{conflict}`.
 - The duplicated UI between `route_mapper.py` and `index.html` is a standing risk. A
   small build step that generates `index.html` from `HTML` would remove it, but it
   needs the Pages build in this repo first.

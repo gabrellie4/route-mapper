@@ -1,0 +1,1245 @@
+{
+ "name": "Rockridge Route Map",
+ "settings": {
+  "minutes_per_block": 2,
+  "spaces_per_block": 10,
+  "walk_speed_ft_per_min": 260,
+  "skip_multiples_of_ten": true
+ },
+ "center": [
+  37.843850898608444,
+  -122.25010871887208
+ ],
+ "zoom": 15,
+ "basemap": "muted",
+ "routes": [
+  {
+   "uid": "aef6e45ff9",
+   "name": "Route 1",
+   "prefix": 1,
+   "color": "#2E7D4F",
+   "start": [
+    37.84406270851387,
+    -122.25179851055147
+   ],
+   "end": null,
+   "visible": true,
+   "segments": [
+    {
+     "uid": "isg0wb9d3k",
+     "kind": "count",
+     "pts": [
+      [
+       37.84406270851387,
+       -122.25179851055147
+      ],
+      [
+       37.843287481298795,
+       -122.25325226783754
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "ak4jh4hf1a",
+     "kind": "count",
+     "pts": [
+      [
+       37.843287481298795,
+       -122.25325226783754
+      ],
+      [
+       37.84315192160445,
+       -122.2530108690262
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "m2tvr0t4p7",
+     "kind": "count",
+     "pts": [
+      [
+       37.84315192160445,
+       -122.2530108690262
+      ],
+      [
+       37.84386784342327,
+       -122.25184679031373
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "52oy3m7b0a",
+     "kind": "count",
+     "pts": [
+      [
+       37.84386784342327,
+       -122.25184679031373
+      ],
+      [
+       37.840089053348215,
+       -122.25148200988771
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "5gu8p1cau3",
+     "kind": "count",
+     "pts": [
+      [
+       37.840089053348215,
+       -122.25148200988771
+      ],
+      [
+       37.84030087405742,
+       -122.25183606147768
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "qkt1pn1h6u",
+     "kind": "count",
+     "pts": [
+      [
+       37.84030087405742,
+       -122.25183606147768
+      ],
+      [
+       37.84020767302032,
+       -122.25180923938753
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "qq5ndyppj2",
+     "kind": "count",
+     "pts": [
+      [
+       37.84020767302032,
+       -122.25180923938753
+      ],
+      [
+       37.84005939840039,
+       -122.25155442953113
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "x0l5ccco1s",
+     "kind": "count",
+     "pts": [
+      [
+       37.84005939840039,
+       -122.25155442953113
+      ],
+      [
+       37.840078462296795,
+       -122.25137472152711
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "1ncpiiyk93",
+     "kind": "count",
+     "pts": [
+      [
+       37.840078462296795,
+       -122.25137472152711
+      ],
+      [
+       37.83972472030545,
+       -122.2517690062523
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "ds5jp6ju5k",
+     "kind": "count",
+     "pts": [
+      [
+       37.83972472030545,
+       -122.2517690062523
+      ],
+      [
+       37.839659055437714,
+       -122.25171267986299
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "sxvxdys4g2",
+     "kind": "count",
+     "pts": [
+      [
+       37.839659055437714,
+       -122.25171267986299
+      ],
+      [
+       37.839991615617706,
+       -122.25143104791644
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "idswzk1wkj",
+     "kind": "count",
+     "pts": [
+      [
+       37.839991615617706,
+       -122.25143104791644
+      ],
+      [
+       37.83640751226271,
+       -122.25133180618288
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "hnogro43c9",
+     "kind": "count",
+     "pts": [
+      [
+       37.83640751226271,
+       -122.25133180618288
+      ],
+      [
+       37.836055870992496,
+       -122.25155711174011
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "9wsprjforc",
+     "kind": "count",
+     "pts": [
+      [
+       37.836055870992496,
+       -122.25155711174011
+      ],
+      [
+       37.83603892438292,
+       -122.25140690803529
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "17ekpo3m8p",
+     "kind": "count",
+     "pts": [
+      [
+       37.83603892438292,
+       -122.25140690803529
+      ],
+      [
+       37.836754915245095,
+       -122.25110650062562
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "n4m0vjmke8",
+     "kind": "count",
+     "pts": [
+      [
+       37.836754915245095,
+       -122.25110650062562
+      ],
+      [
+       37.8375344476901,
+       -122.25062638521197
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "zmelkbyqui",
+     "kind": "count",
+     "pts": [
+      [
+       37.8375344476901,
+       -122.25062638521197
+      ],
+      [
+       37.83658545058002,
+       -122.2512459754944
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "83d4zqin6y",
+     "kind": "count",
+     "pts": [
+      [
+       37.83658545058002,
+       -122.2512459754944
+      ],
+      [
+       37.84013565395643,
+       -122.25126743316652
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "jt3ely67hr",
+     "kind": "count",
+     "pts": [
+      [
+       37.84013565395643,
+       -122.25126743316652
+      ],
+      [
+       37.84022461867219,
+       -122.25101530551912
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "t1dxzy866q",
+     "kind": "count",
+     "pts": [
+      [
+       37.84022461867219,
+       -122.25101530551912
+      ],
+      [
+       37.840343238126266,
+       -122.250993847847
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "jz5lqxbhgc",
+     "kind": "count",
+     "pts": [
+      [
+       37.840343238126266,
+       -122.250993847847
+      ],
+      [
+       37.84025003714268,
+       -122.25131034851076
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "drrq5hwm5w",
+     "kind": "count",
+     "pts": [
+      [
+       37.84025003714268,
+       -122.25131034851076
+      ],
+      [
+       37.841745475072756,
+       -122.2514444589615
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "dcn3h8qjbd",
+     "kind": "count",
+     "pts": [
+      [
+       37.841745475072756,
+       -122.2514444589615
+      ],
+      [
+       37.841874682875925,
+       -122.25117623806001
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "bdehydajou",
+     "kind": "count",
+     "pts": [
+      [
+       37.841874682875925,
+       -122.25117623806001
+      ],
+      [
+       37.841813256243604,
+       -122.25147128105165
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "rfyu0y2k51",
+     "kind": "count",
+     "pts": [
+      [
+       37.841813256243604,
+       -122.25147128105165
+      ],
+      [
+       37.84254401803611,
+       -122.25156784057619
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "cpz6z6kapg",
+     "kind": "count",
+     "pts": [
+      [
+       37.84254401803611,
+       -122.25156784057619
+      ],
+      [
+       37.84262662543541,
+       -122.2512996196747
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "1alx5fvd23",
+     "kind": "count",
+     "pts": [
+      [
+       37.84262662543541,
+       -122.2512996196747
+      ],
+      [
+       37.842696523931764,
+       -122.25131303071977
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "0zmw9qiabl",
+     "kind": "count",
+     "pts": [
+      [
+       37.842696523931764,
+       -122.25131303071977
+      ],
+      [
+       37.84263509798393,
+       -122.2515705227852
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "vrmtvwiqlg",
+     "kind": "count",
+     "pts": [
+      [
+       37.84263509798393,
+       -122.2515705227852
+      ],
+      [
+       37.8441093066114,
+       -122.2516965866089
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    }
+   ]
+  },
+  {
+   "uid": "xri40yfxrx",
+   "name": "Route 2",
+   "prefix": 2,
+   "color": "#C0392B",
+   "start": [
+    37.84495230347362,
+    -122.25291967391969
+   ],
+   "end": null,
+   "visible": true,
+   "segments": [
+    {
+     "uid": "5vefc2zil6",
+     "kind": "count",
+     "pts": [
+      [
+       37.84495230347362,
+       -122.25291967391969
+      ],
+      [
+       37.845164110215684,
+       -122.25200772285463
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "pn5dunczzj",
+     "kind": "count",
+     "pts": [
+      [
+       37.845164110215684,
+       -122.25200772285463
+      ],
+      [
+       37.84612146910074,
+       -122.25196480751039
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "f6y2m7wvup",
+     "kind": "count",
+     "pts": [
+      [
+       37.84612146910074,
+       -122.25196480751039
+      ],
+      [
+       37.84596897028754,
+       -122.25240468978883
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "il4g8uq63u",
+     "kind": "count",
+     "pts": [
+      [
+       37.84596897028754,
+       -122.25240468978883
+      ],
+      [
+       37.84615535768307,
+       -122.2523617744446
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "g3y6i2wx9y",
+     "kind": "count",
+     "pts": [
+      [
+       37.84615535768307,
+       -122.2523617744446
+      ],
+      [
+       37.84629091185663,
+       -122.25206136703493
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "7n0idw8r2h",
+     "kind": "count",
+     "pts": [
+      [
+       37.84629091185663,
+       -122.25206136703493
+      ],
+      [
+       37.84701951127048,
+       -122.2520935535431
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "i4ym2rxc8p",
+     "kind": "count",
+     "pts": [
+      [
+       37.84701951127048,
+       -122.2520935535431
+      ],
+      [
+       37.84692631872371,
+       -122.25252270698549
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "d5g62gvw7f",
+     "kind": "count",
+     "pts": [
+      [
+       37.84692631872371,
+       -122.25252270698549
+      ],
+      [
+       37.84710423166533,
+       -122.25260853767395
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "8joavwd3r9",
+     "kind": "count",
+     "pts": [
+      [
+       37.84710423166533,
+       -122.25260853767395
+      ],
+      [
+       37.847239784094675,
+       -122.25213646888734
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "y0hjwno0la",
+     "kind": "count",
+     "pts": [
+      [
+       37.847239784094675,
+       -122.25213646888734
+      ],
+      [
+       37.84924762527208,
+       -122.25235104560853
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "ighzw12cts",
+     "kind": "count",
+     "pts": [
+      [
+       37.84924762527208,
+       -122.25235104560853
+      ],
+      [
+       37.84877320359778,
+       -122.25271582603456
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "dsw8ncai6k",
+     "kind": "count",
+     "pts": [
+      [
+       37.84877320359778,
+       -122.25271582603456
+      ],
+      [
+       37.84889180930255,
+       -122.2529411315918
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "90to6iyyv5",
+     "kind": "count",
+     "pts": [
+      [
+       37.84889180930255,
+       -122.2529411315918
+      ],
+      [
+       37.849289984201704,
+       -122.25252270698549
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "n2086sjdai",
+     "kind": "count",
+     "pts": [
+      [
+       37.849289984201704,
+       -122.25252270698549
+      ],
+      [
+       37.84928151241773,
+       -122.25297331809999
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "fwu315wvxa",
+     "kind": "count",
+     "pts": [
+      [
+       37.84928151241773,
+       -122.25297331809999
+      ],
+      [
+       37.84946789144038,
+       -122.25297331809999
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "7ju4tr7roc",
+     "kind": "count",
+     "pts": [
+      [
+       37.84946789144038,
+       -122.25297331809999
+      ],
+      [
+       37.849527193757886,
+       -122.25240468978883
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "9ysm30jlq5",
+     "kind": "count",
+     "pts": [
+      [
+       37.849527193757886,
+       -122.25240468978883
+      ],
+      [
+       37.85116222458276,
+       -122.2525441646576
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "opd3y2rcdo",
+     "kind": "count",
+     "pts": [
+      [
+       37.85116222458276,
+       -122.2525441646576
+      ],
+      [
+       37.85122152553753,
+       -122.2523617744446
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "1ig2lrmzgl",
+     "kind": "count",
+     "pts": [
+      [
+       37.85122152553753,
+       -122.2523617744446
+      ],
+      [
+       37.849705100424224,
+       -122.25227594375612
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "o80mlwrq8r",
+     "kind": "count",
+     "pts": [
+      [
+       37.849705100424224,
+       -122.25227594375612
+      ],
+      [
+       37.85105421200688,
+       -122.25103139877321
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "uinvsm99i4",
+     "kind": "count",
+     "pts": [
+      [
+       37.85105421200688,
+       -122.25103139877321
+      ],
+      [
+       37.85100550040129,
+       -122.25098043680194
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "yd8k68o7eb",
+     "kind": "count",
+     "pts": [
+      [
+       37.85100550040129,
+       -122.25098043680194
+      ],
+      [
+       37.84942976849681,
+       -122.25228935480119
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "cbhf6s5r13",
+     "kind": "count",
+     "pts": [
+      [
+       37.84942976849681,
+       -122.25228935480119
+      ],
+      [
+       37.8495081323039,
+       -122.2518038749695
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "qmvls6wkrh",
+     "kind": "count",
+     "pts": [
+      [
+       37.8495081323039,
+       -122.2518038749695
+      ],
+      [
+       37.849427650554915,
+       -122.251895070076
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "2oc1usetv3",
+     "kind": "count",
+     "pts": [
+      [
+       37.849427650554915,
+       -122.251895070076
+      ],
+      [
+       37.84935987638237,
+       -122.25216597318651
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "o4qowmf3x6",
+     "kind": "count",
+     "pts": [
+      [
+       37.84935987638237,
+       -122.25216597318651
+      ],
+      [
+       37.849402235247524,
+       -122.25225716829301
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "axqhq4dpya",
+     "kind": "count",
+     "pts": [
+      [
+       37.849402235247524,
+       -122.25225716829301
+      ],
+      [
+       37.84721436803314,
+       -122.2520023584366
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "ue68c1zpju",
+     "kind": "count",
+     "pts": [
+      [
+       37.84721436803314,
+       -122.2520023584366
+      ],
+      [
+       37.847332976245276,
+       -122.25166440010072
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "iv3q6jyr9q",
+     "kind": "count",
+     "pts": [
+      [
+       37.847332976245276,
+       -122.25166440010072
+      ],
+      [
+       37.84717624392444,
+       -122.25170731544496
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "fd0tfbnji9",
+     "kind": "count",
+     "pts": [
+      [
+       37.84717624392444,
+       -122.25170731544496
+      ],
+      [
+       37.847078815557104,
+       -122.25197553634645
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "6cjchx9cpr",
+     "kind": "count",
+     "pts": [
+      [
+       37.847078815557104,
+       -122.25197553634645
+      ],
+      [
+       37.84507938759185,
+       -122.25178778171541
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    }
+   ]
+  }
+ ]
+}

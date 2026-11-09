@@ -107,13 +107,13 @@ const body = [
     ["3  Draw the Routes", "Click along the streets in walking order, counting or walking", "Block faces with INV_IDs, distances and times"],
     ["4  Add Parking Lots", "Draw each lot and drag its pin to where it is counted", "Lots numbered in walking order"],
     ["5  Check and Fix the Route", "Enter spaces and streets, insert missed blocks, flip, pin or flag", "A checked, complete route"],
-    ["6  Review the Totals", "Compare walking time, distance and spaces", "Balanced, field-ready routes"],
+    ["6  Review the Totals", "Compare route time, distance and spaces", "Balanced, field-ready routes"],
     ["7  Export", "Download the CSV, GIS layers, plan sheets or viewer", "Files for Survey123, ArcGIS and the field team"],
     ["8  Save and Share", "Save the project and upload it with the exports", "A shared project anyone can reopen"],
     ["Troubleshooting", "Fix start-up, numbering, lot and ArcGIS problems", "A working route map"],
   ], { 0: "s1", 1: "s2", 2: "s3", 3: "s4", 4: "s5", 5: "s6", 6: "s7", 7: "s8", 8: "ts" }),
   gap(),
-  para("**Two habits prevent most problems:** (1) Draw in walking order and let Route Mapper number the IDs. When an ID is wrong, fix the order (Step 5) rather than typing over it. (2) Click **Save** often. Route Mapper only writes your project to disk when you click Save (Step 8).", { run: { color: LINK } }),
+  para("**Two habits prevent most problems:** (1) Draw in walking order and let Route Mapper number the IDs. When an ID is wrong, fix the order (Step 5) rather than typing over it. (2) Leave **autosave** ticked (it is by default). Route Mapper then saves your project a moment after every change, and warns you before you close a tab with changes that aren't saved yet (Step 8).", { run: { color: LINK } }),
   label("Key terms"),
   table([2600, 6760], ["Term", "What it means"], [
     ["Route", "One counter's walk, drawn in the order it is walked. Each route has its own tab and colour."],
@@ -125,7 +125,8 @@ const body = [
     ["Walking order", "The order of the legs in the Blocks in walking order list. INV_IDs follow it."],
     ["Pinned ID", "An ID you typed yourself. The blocks after it continue from it."],
     ["START / END", "The markers at each end of a route. The START takes the zone's first number (x.1)."],
-    ["Not surveyed", "A block with no space count yet. It is timed as one block until you enter the count."],
+    ["Not surveyed", "A block with no space count yet. It is timed by its length (one space per 16 ft of curb) until you enter the count."],
+    ["Bend", "A point added with *Shift*-click so a block face follows a curved street. A bend doesn't start a new block or use an INV_ID."],
   ]),
   gap(),
   para("*TIP: Keep the window that starts Route Mapper (the black Command Prompt window on Windows, Terminal on a Mac) open while you work. Hover over any button to see what it does.*"),
@@ -166,7 +167,7 @@ const body = [
     "The map opens on all of Oakland. Zoom in to the study area, or type a place in the *Find a place* box (for example “Fruitvale Ave & International Blvd, Oakland”), press *Enter* and click a result.",
     "In the *Routes* panel, give Route 1 a *Name*, set its *Zone number* and pick a *Colour*. The zone number becomes the first part of every INV_ID on that route.",
     "Click *Add route* for each other zone or counter. Each route gets a tab; click a tab to work on that route, or right-click it to hide or show it.",
-    "Check the *Timing model*: *Minutes per block* and *Spaces that counts as a block* (default 2 minutes per 10 spaces), and *Walking pace* (default 260 ft/min, about 3 mph). Leave *Skip 10, 20, 30…* ticked.",
+    "Check the *Timing model*: *Minutes per block* and *Spaces that counts as a block* (default 2 minutes per 10 spaces), *Feet of curb per space* (default 16, so 10 spaces is about 160 ft of curb), *Lot sq ft per space* (default 325, for lot time) and *Walking pace* (default 260 ft/min, about 3 mph). Leave *Skip 10, 20, 30…* ticked.",
   ]),
   note("TIP", "INV_IDs skip numbers ending in 0 (there is no 2.10, 2.20 and so on) because a Number column in Excel drops the trailing zero and 2.10 would become 2.1. Route Mapper does this for you. Keep the box ticked unless a study area drops the convention."),
   h2("Showing meters and other ArcGIS data (optional)"),
@@ -186,6 +187,7 @@ const body = [
   ...steps([
     "Click the route's tab, then pick *Count block* (or press *C*).",
     "Click where the walk starts, then click at the end of each block face along the route. Each click ends a block face, and it gets the next INV_ID.",
+    "**On a curved street**, hold *Shift* while you click to bend the block instead of ending it. Shift-click a few points around the curve, then click normally where the block face ends. It stays one block face with one INV_ID, and its length follows the curve. While you bend, *Backspace* takes back the last bend and *Enter* ends the block at the last bend.",
     "Where the counter walks without counting (crossing a street or cutting through to the next block), pick *Walk only* (*W*) and keep clicking. These legs are dashed, get no ID, and count only their walking time, not counting time. Press *C* to go back to counting.",
     "The start and end of the route are marked automatically. To put them somewhere else, use *Start point* or *End point*.",
     "Press *A* to show or hide the direction arrows. If a route runs the wrong way, click *Reverse direction* in the Routes panel; every ID renumbers to match.",
@@ -195,7 +197,7 @@ const body = [
   ...bullets([
     "**Zoom in first.** Draw at street level so each click lands on the right side of the street.",
     "**One side, one leg.** Draw each block face along its own side of the street.",
-    "**Click at corners.** Click only where a block face ends or the street bends.",
+    "**Click at corners, Shift-click bends.** A plain click ends a block face, so use it only where one ends. Where the street bends mid-block, *Shift*-click: a plain click there would split the block into two INV_IDs, and clicking only the two ends would cut across the curve and shorten it. A curve already split into several IDs can be joined back with *Merge with next* (Step 5.11).",
     "**Snapping** pulls new points onto nearby corners and lines so legs join up. Untick *Snap to nearby lines and corners* if it gets in the way.",
     "**Rotate the map** by right-clicking and dragging on it, as in ArcGIS Online. The compass button under the zoom buttons turns it back to north up. Exports are always north up.",
     "**Fix instead of redrawing.** Drag an ID badge to move that block face, or drag a corner handle (*P* shows or hides them); a corner moves every leg that meets there, while a selected block's blue end tabs move just that block's end (Step 5.6). *Ctrl + Z* (⌘Z on a Mac) undoes and *Ctrl + Shift + Z* redoes.",
@@ -208,15 +210,16 @@ const body = [
     "The new lot is tied to the nearest point on the route by a dotted line ending in a blue pin. The pin marks where the lot is counted, and the lot takes the INV_ID at that point.",
     "If that is the wrong place, drag the pin along the route. On the first half of a block face the lot is counted just before it; on the second half, just after. The IDs renumber when you let go.",
     "Click empty map to hide the line. Click the lot, or its row in the list, to show it again. *↑* and *↓* on the lot's row move the pin one block at a time.",
+    "Open the lot's row to see its suggested time. Route Mapper counts the lot's spaces at the block-face rate: the surveyed count once you enter it, or until then the lot's area ÷ 325 sq ft. If you know the lot takes longer or shorter (a garage with several levels, say), type your own figure in *Minutes to allow*; clear the box to go back to the suggestion.",
   ]),
-  note("NOTE", "Parking lots, and walking into and around them, are not included in the route's distance or time, because how long a lot takes depends on its layout and how it is counted. Plan your own allowance for each lot."),
+  note("NOTE", "Lot time is a suggestion, because the map can't see levels, aisle layout or how the lot is counted. It is included in the route's time and shown on its own line. Lots add no distance, and walking into and around them isn't measured."),
   note("NOTE", "Lots in older projects may not be tied to the route yet. Open the lot in the list and click *Attach to the route*."),
 
   // ---- STEP 5
   h1("STEP 5: Check and Fix the Route", "s5"), back(),
   para("*The Blocks in walking order list on the right shows every leg in the order it will be walked. Click a row to open it.*"),
   ...steps([
-    "Enter the space count from the inventory in *Spaces from survey*. Until a block has a count it shows *not surveyed* and is timed as one block (2 minutes by default).",
+    "Enter the space count from the inventory in *Spaces from survey*. Until a block has a count, its row shows an estimate such as *≈31 sp est.* and it is timed by its length: one space per 16 ft of curb, at 2 minutes per 10 spaces. The estimate is never exported as a count.",
     "Type the street or cross streets, and any *Note for the field team*.",
     "**Missed a block?** Click *＋ Insert a block* at the top of the list (or press *I*, or click *＋* on a block's row). Every line on the route gets a white handle near its middle, as when editing a line in ArcGIS Online. Then:",
     [
@@ -231,6 +234,7 @@ const body = [
     "To keep a specific ID, type it in the first field of the row; it turns blue. The blocks after it continue from it. *Back to auto ID* releases it.",
     "Flag anything to check in the field with *⚑* on the row (or the *Flag* tool). It gets a red ring on the map, the plan sheets and the viewer.",
     "If the walk ends in a parking lot or at a block face, open that row and click *Make this the END* (or *Make this the START*). It keeps its own ID instead of getting a separate marker.",
+    "**A curve drawn as several blocks?** Open the first of them and click *Merge with next* (or select it and press *M*). The next block joins onto it with its shape kept, it keeps the first block's INV_ID, street and note, and the IDs after it move up by one. Repeat until the curve is one block. The two must meet end to start and both be counted blocks (or both walk-only).",
   ]),
   note("NOTE", "Inserting keeps the route one continuous line, so its arrows stay consistent. Each point added with a plain drag or click is a new block; that is how missed blocks get their IDs. *Ctrl + Z* (⌘Z on a Mac) takes back the last insert."),
   note("NOTE", "If a red banner says two blocks share an ID, two pinned IDs clash. Open one of them and click *Back to auto ID*."),
@@ -238,8 +242,8 @@ const body = [
   // ---- STEP 6
   h1("STEP 6: Review the Totals", "s6"), back(),
   ...steps([
-    "*This route* (left panel) shows the walking time, total distance, block faces, parking lots, spaces, the split between *Counting* time and *Walking only* time (walk-only legs count their walking time but no counting time), and the next ID.",
-    "*All routes* shows the same for the whole study area, with the parking lot note when there are lots.",
+    "*This route* (left panel) shows the route time (counting, walking and lot time together), total distance, block faces, parking lots with their time, spaces (entered counts, plus an estimate such as *+ ≈410 est.* for blocks and lots not surveyed yet), the split between *Counting* time and *Walking only* time (walk-only legs count their walking time but no counting time), and the next ID.",
+    "*All routes* shows the same for the whole study area, with a note on how lot time is suggested when there are lots.",
     "Compare the routes. If one counter's walk is much longer than the others, move the boundary between routes so the walks are similar.",
     "Scroll the list for rows that still say *not surveyed* and for *⚑* flags before exporting.",
   ]),
@@ -247,14 +251,15 @@ const body = [
   // ---- STEP 7
   h1("STEP 7: Export", "s7"), back(),
   para("Choose an export from the *Export…* menu in the top bar. Files go to your browser's Downloads folder."),
+  para("**To keep working on a project later, export the *Project file (JSON)*.** It is the only export Route Mapper can open again (with *Import file…*), so it is listed first in the menu under *To keep working later*. The other exports are one-way, for Survey123, GIS, printing and sharing.", { run: { color: LINK } }),
   table([2700, 2700, 3960], ["Export", "Use it for", "Good to know"], [
-    ["Inventory IDs (CSV)", "Seeding Survey123", "One row per INV_ID, plus each route's start and end. Lots have a blank minutes cell."],
+    ["Project file (JSON)", "Picking up where you left off (recommended), backups, handing over", "Everything on screen: routes, IDs, spaces, notes and settings. Reopen it with *Import file…* on any computer. Works even if Route Mapper's window was closed."],
+    ["Inventory IDs (CSV)", "Seeding Survey123", "One row per INV_ID, plus each route's start and end. A lot's minutes are its suggested (or typed) time."],
     ["GIS layers for ArcGIS (.zip)", "ArcGIS Pro or ArcGIS Online", "Block faces (lines) and lots (polygons) with a Text INV_ID. See below."],
     ["Plan sheet (PDF)", "Printing route maps for the field", "Vector, ready to print. No basemap."],
     ["Vector (SVG)", "Clean-up in Illustrator or Figma", "One layer per route. Tick *map behind* to include the basemap."],
     ["Image (PNG)", "Email and slides", "Twice screen resolution. Tick *map behind* to include the basemap."],
     ["Shareable viewer (HTML)", "Sending routes to anyone", "Opens by double-clicking; needs internet for the map."],
-    ["Project file (JSON)", "Backup or handing over", "Reopen it with *Import file…*."],
     ["GeoJSON, one file (QGIS)", "QGIS and similar tools", "Everything in one file. Use the .zip for ArcGIS."],
   ]),
   h2("Bringing the routes into ArcGIS Pro"),
@@ -274,14 +279,15 @@ const body = [
   // ---- STEP 8
   h1("STEP 8: Save and Share", "s8"), back(),
   ...steps([
-    "Click *Save* often. The project is saved as `<study area name>.json` in the `route_projects` folder next to `route_mapper.py`; the bottom-right of the window shows where.",
+    "Leave *autosave* (next to *Save*) ticked. A moment after each change the project is saved as `<study area name>.json` in the `route_projects` folder next to `route_mapper.py`, and the bottom-right corner says when (for example *Autosaved to Fruitvale 2027.json at 2:14 PM*). With autosave unticked, click *Save* yourself; the corner shows *Unsaved changes* until you do.",
+    "If you close or reload the tab while changes aren't saved yet, the browser asks *Leave site?*. Choose *Cancel* to stay. If you leave anyway with autosave on, Route Mapper makes one last save on the way out.",
     "To reopen it later, start Route Mapper (Step 1) and pick the project from *Open…*. *Import file…* opens a project file saved anywhere else, and *Merge file…* adds another project's routes alongside the current ones.",
-    "To share with colleagues, who each run their own copy: upload the project's .json (from the `route_projects` folder, or *Export…* > *Project file (JSON)*) and your exports to the neighbourhood's Maps folder on SharePoint. They download it and open it with *Import file…*, then click *Save* to keep a copy in their own *Open…* list.",
+    "To share with colleagues, who each run their own copy, or to carry on from another computer: upload the project's .json (*Export…* > *Project file (JSON)*, or the file in the `route_projects` folder) and your exports to the neighbourhood's Maps folder on SharePoint. They download it and open it with *Import file…*; it then autosaves into their own *Open…* list.",
     "To combine routes drawn by different people, open your project and use *Merge file…* on theirs. Zone numbers that clash are bumped so the IDs stay unique.",
     "Anyone without Route Mapper can double-click the shareable viewer (*Export…* > *Shareable viewer (HTML)*).",
     "When you are done, close the browser tab, then close the black window (Windows) or press *Ctrl + C* in Terminal (Mac) to stop Route Mapper.",
   ]),
-  note("NOTE", "Each copy saves projects only on its own computer, and only when you click Save. If you close the black window or Terminal first, unsaved changes are lost."),
+  note("NOTE", "Each copy saves projects only on its own computer. Autosave never writes over a different saved project: if one already has this study area's name, the corner turns red and says so (Troubleshooting M). If you close the black window or Terminal, Route Mapper stops, and anything not saved by then is lost."),
   note("NOTE", "Two people editing the same project at once are each editing their own copy. Agree who owns which routes, then bring them together with *Merge file…*."),
 
   // ---- TROUBLESHOOTING
@@ -299,7 +305,9 @@ const body = [
     ["I. My latest changes are gone after reopening", "Step 8"],
     ["J. An inserted block is in the wrong place or runs the wrong way", "Step 5"],
     ["K. A reference layer won't load, or lands in the wrong place", "Step 2"],
-  ], { 0: "ta", 1: "tb", 2: "tc", 3: "td", 4: "te", 5: "tf", 6: "tg", 7: "th", 8: "ti", 9: "tj", 10: "tk" }),
+    ["L. A curved street has several INV_IDs", "Step 3"],
+    ["M. The corner says “Not autosaved”", "Step 8"],
+  ], { 0: "ta", 1: "tb", 2: "tc", 3: "td", 4: "te", 5: "tf", 6: "tg", 7: "th", 8: "ti", 9: "tj", 10: "tk", 11: "tl", 12: "tm" }),
 ];
 
 const trouble = [
@@ -349,8 +357,8 @@ const trouble = [
      "If the join still fails, follow Troubleshooting B in the Occupancy Rate workflow."]],
   ["ti", "I. My latest changes are gone after reopening",
     "A project opens without your latest changes, or the *Open…* list is empty.",
-    "Changes are only saved when you click Save, and projects are saved next to `route_mapper.py`. If the script moved, it looks in a new, empty `route_projects` folder.",
-    ["Click *Save* before closing Route Mapper.",
+    "Autosave was unticked, or stopped with a red message in the corner, and the changes weren't saved before Route Mapper closed. Or `route_mapper.py` moved: projects are saved next to it, so it now looks in a new, empty `route_projects` folder.",
+    ["Keep *autosave* ticked, and check the bottom-right corner says *Autosaved* before closing Route Mapper. If it is red, see Troubleshooting M.",
      "If you moved `route_mapper.py`, move the `route_projects` folder with it, or use *Import file…* to open the .json from its old place."]],
   ["tj", "J. An inserted block is in the wrong place or runs the wrong way",
     "A block you inserted has an unexpected ID, the line goes somewhere you didn't mean, or a block's arrows point against the walk.",
@@ -364,6 +372,16 @@ const trouble = [
     ["For a CSV, check it has columns named Latitude and Longitude (or Lat / Lon, or a WKT geometry column).",
      "From ArcGIS, export the layer again as GeoJSON, or as a shapefile or CSV in WGS 1984, and load that.",
      "Use CSV, GeoJSON, KML/KMZ or a zipped shapefile; other formats (such as a file geodatabase) won't load."]],
+  ["tl", "L. A curved street has several INV_IDs",
+    "One block face on a curving street shows up as several short blocks, each with its own INV_ID.",
+    "Every plain click ends a block face, so clicking around a bend split the block at each click.",
+    ["Open the first of those blocks in the list and click *Merge with next* (or select it and press *M*). Repeat until the curve is one block; it keeps the first INV_ID and its shape (Step 5.11).",
+     "Next time, hold *Shift* while you click around a bend (Step 3.3)."]],
+  ["tm", "M. The corner says “Not autosaved”",
+    "The bottom-right corner is red and says *Not autosaved: another saved project is called …*.",
+    "A different project in the `route_projects` folder already has this study area's name, usually after renaming a study area or opening a file with *Import file…*. Autosave won't write over it.",
+    ["If the saved one is an older copy of this same project, click *Save* and choose *OK* to replace it. Autosave carries on from there.",
+     "Otherwise rename this study area (the name box in the top bar). Autosave saves it under the new name."]],
 ];
 for (const [id, title, see, why, fix] of trouble) {
   body.push(h3(title, id));

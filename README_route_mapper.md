@@ -49,6 +49,27 @@ when you're covering ground you don't count — those legs render dashed and nev
 receive an ID. New points snap to nearby corners and lines so legs join up; untick
 the snap option in the Draw panel if it gets in the way.
 
+**Curved streets.** Hold `Shift` while you click to bend the block instead of ending
+it. Shift-click a few points around the curve, then click normally where the block
+ends: it stays one block with one ID, and its length follows the curve. (`Alt`/`Option`
+works too.) While you're bending, a bar under the tools counts the bends:
+
+- `Backspace` or `⌘Z` takes back the last bend.
+- `Enter` or **End here** ends the block at the last bend.
+- Switching tools ends it there too, so bends are never thrown away.
+
+Clicking twice on the same spot no longer lays a block a few feet long with its own
+ID.
+
+**A curve already drawn as several blocks?** Open the first of them and click
+**Merge with next** (or select it and press `M`). The next block joins onto it with
+every corner kept, so the shape doesn't change; it keeps the first block's ID and
+details, and the IDs after it move up by one. Space counts add together; if only one
+half had a count, the note says to check it. Repeat until the curve is one block.
+Merging needs the two to meet end to start and be the same kind (both counted or both
+walk-only). Removing a joint with `Delete` also merges two blocks, but it straightens
+the line across the missing corner.
+
 **Parking lot** takes clicks as the lot's corners. Close the shape by clicking the
 first corner again, pressing `Enter`, or double-clicking. You can draw a lot while
 routing or add it afterwards.
@@ -121,9 +142,10 @@ To change a route after drawing it:
   scroll also rotates. The compass button under the zoom buttons turns it back to north
   up. Exports are always north up.
 
-Keys: `C` count · `W` walk · `L` lot · `A` direction arrows · `I` insert a block ·
-`F` flip the selected block · `P` corner handles · `Esc` select (also ends Insert a
-block) · `⌘Z` / `Ctrl+Z` undo · `⇧⌘Z` / `Ctrl+Shift+Z` redo · `Delete` removes the
+Keys: `C` count · `W` walk · `L` lot · `Shift`-click bend the block you're drawing ·
+`A` direction arrows · `I` insert a block · `F` flip the selected block · `M` merge
+the selected block with the next · `P` corner handles · `Esc` select (also ends Insert
+a block) · `⌘Z` / `Ctrl+Z` undo · `⇧⌘Z` / `Ctrl+Shift+Z` redo · `Delete` removes the
 selected block.
 
 ---
@@ -172,36 +194,66 @@ conflict.
 
 ## Timing
 
-The default follows your rule: a block face of about 10 spaces takes 2 minutes. Both
-halves are editable, so if the real pace turns out to be 3 minutes per 12 spaces you
-change it once and every route re-estimates. **Walk-only** legs count their walking
-time, which is distance ÷ walking pace (default 260 ft/min, roughly 3 mph), but no
-counting time, and they get no ID. The route panel shows the two separately, as
-**Counting** and **Walking only**.
+The default follows your rule: a block face of about 10 spaces takes 2 minutes. That
+is 0.2 minutes a space, so a block's time follows how many spaces it has, and block
+faces of different lengths take different times. All of it is editable in the
+**Timing model** panel, and every route re-estimates when you change it:
 
-Space counts are never guessed. Until the inventory survey gives you a real count, a
-block face is costed as one block of time (2 minutes by default). Its row says "not
-surveyed", and the CSV marks it the same way. Typing a count replaces it.
+| Setting | Default | What it does |
+|---|---|---|
+| Minutes per block | 2 | Counting time for one "block" of spaces. |
+| Spaces that counts as a block | 10 | How many spaces that is. |
+| Feet of curb per space | 16 | Turns a block's length into spaces until it's surveyed. 10 spaces is about 160 ft of curb. |
+| Lot sq ft per space | 325 | Turns a lot's area into spaces until it's surveyed. Surface lots run about 300–350 sq ft a space, aisles included. |
+| Walking pace, ft/min | 260 | About 3 mph. Times walk-only legs, and is the least time any block can take. |
 
-**Parking lots are not included in the distance or time.** How long a lot takes
-depends on its aisle layout, how many levels it has, and whether it's counted from the
-edge or walked aisle by aisle. The map can't tell any of that. The block-face rule
-doesn't carry over either, because it includes walking along the curb. So lots aren't
-given a made-up figure. They're listed separately ("Parking lots: 2 · not timed"), and
-the app and the shareable viewer both say so wherever totals appear. Walking into and
-around a lot isn't counted either, so plan your own allowance for each lot.
+- **A block with a survey count** takes spaces ÷ 10 × 2 minutes.
+- **A block with no count yet** is timed by its length: one space per 16 ft of curb,
+  rounded down. A 160 ft block is about 10 spaces, so 2 minutes; a 1,300 ft block is
+  about 81 spaces, so about 16 minutes; a 30 ft stub is about 0.2 minutes. Before this,
+  every unsurveyed block cost a flat 2 minutes whatever its length. The row shows the
+  estimate with a ≈ (for example "≈31 sp est."). It is never stored or exported as a
+  count: the CSV's SPACES cell stays blank and SPACES_SOURCE says "not surveyed".
+  Typing the survey count replaces the estimate.
+- **No block takes less time than walking it** at the walking pace. This only matters
+  for long blocks with few spaces, such as a 1,600 ft frontage with 2 spaces.
+- **Walk-only** legs count their walking time (distance ÷ pace) but no counting time,
+  and they get no ID.
 
-Per-route you get total distance, total time, the counting/connecting split, block
-and lot counts, total spaces (block faces and lots together), and the next ID in
-sequence. Every block face carries its own length and estimated minutes.
+**Parking lots get a suggested time.** It's the lot's spaces at the same 0.2 minutes a
+space: the surveyed count once there is one, or until then its drawn area ÷ 325 sq ft.
+A 10,000 sq ft lot with no count is about 30 spaces, so 6 minutes. The map can't see
+levels, aisle layout or whether the lot is counted from the edge, so the suggestion is
+a starting point. Open the lot and type your own figure in **Minutes to allow** (a
+three-level garage, say), and that replaces it. Clear the box to go back to the
+suggestion. Lot time is included in the route's time and shown on its own line
+("Parking lots: 2 · 14 min"). Lots still add no distance, and walking into them isn't
+measured.
+
+Per route you get the route time (counting, walking and lots together), total
+distance, the **Counting** / **Walking only** split, block and lot counts, spaces
+entered so far plus an estimate for the rest ("Spaces 120 + ≈410 est."), and the next
+ID in sequence. Every block face carries its own length and estimated minutes.
 
 ---
 
 ## Exports
 
+**To keep working later, use Project file (JSON).** It's the only export Route Mapper
+can open again, and it's listed first in the Export menu for that reason. Everything
+else is one-way: for Survey123, GIS, printing or sharing.
+
+- **Project file (JSON)** — the whole project as it is on screen: every route, block,
+  lot, pinned ID, space count, note and setting. Open it again with **Import file…**
+  on any computer running Route Mapper and carry on. Use it to move a project to
+  another computer, hand it to a colleague, or keep a dated backup. It's built in the
+  browser, so it still works if Route Mapper's black window or Terminal has been
+  closed. (On your own computer, autosave already keeps the project in
+  `route_projects/`; see below.)
 - **Inventory IDs (CSV)** — one row per block face and lot with ID, route, street,
   length, spaces, estimated minutes, flag state, note and label coordinates. This is
-  the one that seeds Survey123. Lots have a blank minutes cell, since they aren't timed.
+  the one that seeds Survey123. A lot's minutes are its suggested (or typed)
+  allowance. The columns haven't changed.
 - **SVG** — a vector plan sheet with each route on its own named layer, solid and
   dashed legs, ID labels, red flag circles, start/end markers and lot polygons. Opens
   in Illustrator or Figma, so your annotation pass starts from real geometry instead
@@ -217,7 +269,8 @@ sequence. Every block face carries its own length and estimated minutes.
   - start and end points
 
   The zip also holds the CSV with a `schema.ini` that makes ArcGIS read `INV_ID` as
-  Text, and a short README with the import steps. Block faces and lots come in with a
+  Text, and a short README with the import steps. The lots layer now has
+  `EST_MINUTES` too. Block faces and lots come in with a
   Text `INV_ID`, ready for the one-to-many join in the occupancy workflow, so you don't
   have to draw them again in ArcGIS. Field names match the CSV (`INV_ID`, `ROUTE`,
   `ZONE_PREFIX`, `WALK_ORDER`, `STREET`, `SPACES`…).
@@ -226,12 +279,37 @@ sequence. Every block face carries its own length and estimated minutes.
 - **Shareable viewer (HTML)** — one self-contained, read-only file with the routes
   built in. Anyone can open it by double-clicking. No Python or install is needed, only
   internet for the map tiles.
-- **Project file (JSON)** — the raw project, for backup or to hand to someone else.
-
 The **map behind** option and the basemap picker next to the Export menu control
 whether SVG and PNG exports have map tiles drawn behind the routes.
 
+---
+
+## Saving, autosave and closing the tab
+
 Projects save as JSON into `route_projects/` and reopen from the **Open…** menu.
+
+**Autosave** is on by default (the tick box beside **Save**). A moment after each
+change, the project is written to `route_projects/<study area name>.json`, the same
+file **Save** writes. The bottom-right corner says where things stand: "Saving…",
+"Autosaved to Fruitvale 2027.json at 2:14 PM", or what went wrong. Untick it to save
+only when you click **Save**; the choice is remembered in that browser.
+
+Autosave never writes over a different project. If you rename a study area, or open
+a file with **Import file…**, and a saved project already has that name, autosave
+stops and the corner says so in red. Rename the study area, or click **Save**, which
+asks before replacing the other one.
+
+**Closing or reloading the tab with changes that aren't saved yet** brings up the
+browser's "Leave site?" box. Browsers don't let a page change that box's wording.
+Choose **Cancel** to stay. If you leave anyway with autosave on, Route Mapper makes one
+last save on the way out. **New**, **Open…** and **Import file…** also save first
+(autosave on) or ask before discarding unsaved changes (autosave off).
+
+The project also lives in Route Mapper's memory while the black window or Terminal
+stays open, so a closed tab reopens where you left off at
+`http://127.0.0.1:8765/`. Closing that window stops Route Mapper; anything not saved
+by then is lost.
+
 **Import file…** opens a project JSON from anywhere on disk. **Merge file…** adds
 another project's routes alongside the current ones. It bumps zone numbers where
 they clash, so IDs stay unique.
@@ -273,4 +351,5 @@ rm.stop()                     # shut it down again
 
 Distances are great-circle along the vertices you click, so they measure the path you
 drew rather than the true curb line. At block scale the difference is small, but a
-curving street needs a few more clicks to measure honestly.
+curving street needs a few more points to measure honestly: Shift-click them, so the
+block keeps one ID. Three or four bends on a 90° curve get the length within about 1%.

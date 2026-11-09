@@ -184,9 +184,38 @@ def walk_order_key(inv_id):
 DEFAULT_SETTINGS = {
     "minutes_per_block": 2.0,       # your rule: a block of ~10 spaces takes 2 min
     "spaces_per_block": 10.0,       # what "a block" means for that rule
+    "ft_per_space": 16.0,           # curb per parking space, to time blocks not yet surveyed
+    "lot_sqft_per_space": 325.0,    # lot area per space, aisles included (300-350 is typical)
     "walk_speed_ft_per_min": 260.0, # ~3 mph, for connector legs you don't count
     "skip_multiples_of_ten": True,
 }
+# The smallest value each numeric setting may take.
+_SETTING_FLOOR = {"minutes_per_block": 0.0, "spaces_per_block": 1.0, "ft_per_space": 1.0,
+                  "lot_sqft_per_space": 1.0, "walk_speed_ft_per_min": 1.0}
+
+
+def clean_settings(settings):
+    """The project's settings with every number usable. A box left empty in the
+    UI arrives as null, which used to make compute() fail; it now falls back to
+    the default."""
+    s = {**DEFAULT_SETTINGS, **(settings or {})}
+    for key, low in _SETTING_FLOOR.items():
+        try:
+            v = float(s[key])
+        except (TypeError, ValueError):
+            v = float("nan")
+        s[key] = max(low, v if math.isfinite(v) else DEFAULT_SETTINGS[key])
+    s["skip_multiples_of_ten"] = bool(s["skip_multiples_of_ten"])
+    return s
+
+
+def _typed_minutes(value):
+    """Minutes a planner typed for a lot, or None if the box is empty."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, v) if math.isfinite(v) else None
 
 ROUTE_COLORS = [
     ("#2E7D4F", "Green"),
@@ -239,8 +268,10 @@ def new_segment(kind, pts, spaces=None):
     }
 
 
-# Space counts are never guessed. They come from the inventory survey, and until
-# one is entered a block face is simply costed as one block of walking time.
+# Space counts come from the inventory survey and are never stored or exported as
+# a guess. Until one is entered, a block face is timed by its length (one space
+# per ft_per_space of curb) and a lot by its area (lot_sqft_per_space), and that
+# estimate is shown as an estimate (spaces_est), never as the count.
 
 
 def migrate(project):
@@ -328,10 +359,12 @@ def compute(project):
     This is the single source of truth. The browser never calculates an ID, a
     distance or a duration; it posts geometry and renders what comes back.
     """
-    s = {**DEFAULT_SETTINGS, **project.get("settings", {})}
-    mins_per_block = float(s["minutes_per_block"])
-    spaces_per_block = max(1.0, float(s["spaces_per_block"]))
-    walk_speed = max(1.0, float(s["walk_speed_ft_per_min"]))
+    s = clean_settings(project.get("settings"))
+    # Every counted space costs the same: 2 min per 10 spaces is 0.2 min a space.
+    min_per_space = s["minutes_per_block"] / s["spaces_per_block"]
+    ft_per_space = s["ft_per_space"]
+    lot_sqft_per_space = s["lot_sqft_per_space"]
+    walk_speed = s["walk_speed_ft_per_min"]
 
     out = migrate(json.loads(json.dumps(project)))
     out["settings"] = s
@@ -343,9 +376,9 @@ def compute(project):
         # next save follow it too.
         route["segments"] = _walk_order(route.get("segments", []))
         seq = IdSequence(route.get("prefix", 1), s["skip_multiples_of_ten"])
-        r_count_ft = r_walk_ft = r_count_min = r_walk_min = 0.0
+        r_count_ft = r_walk_ft = r_count_min = r_walk_min = r_lot_min = 0.0
         n_blocks = n_lots = 0
-        r_spaces = r_lot_spaces = 0
+        r_spaces = r_lot_spaces = r_spaces_est = 0
 
         # The start marker occupies the first slot in the sequence rather than
         # echoing the first block face's number, which produced two 2.1s. Every
@@ -405,23 +438,36 @@ def compute(project):
                     seg["id_is_manual"] = False
 
                 if kind == "lot":
-                    # How long a lot takes depends on its aisles, how many levels
-                    # it has and whether it is counted from the edge or walked,
-                    # none of which the map knows, and the block-face rate bakes
-                    # in a walk along the curb that a lot does not have. Rather
-                    # than invent a figure, lots stay out of the time and
-                    # distance totals and every output that shows them says so.
-                    seg["minutes"] = None
+                    # A suggested allowance, not a measurement: the lot's spaces
+                    # (from the survey, or its area at lot_sqft_per_space) at the
+                    # block-face rate. The map can't see levels or aisle layout,
+                    # so a planner can type their own minutes (minutes_manual),
+                    # which replace the suggestion. Lots still add no distance.
+                    est = None if seg["spaces_known"] else int(seg["area_sqft"] // lot_sqft_per_space)
+                    basis = seg["spaces_effective"] if seg["spaces_known"] else est
+                    suggested = basis * min_per_space
+                    typed = _typed_minutes(seg.get("minutes_manual"))
+                    minutes = suggested if typed is None else typed
+                    seg["minutes_suggested"] = round(suggested, 2)
+                    seg["minutes"] = round(minutes, 2)
+                    r_lot_min += minutes
                     n_lots += 1
                     r_lot_spaces += seg["spaces_effective"] or 0
                 else:
-                    minutes = ((seg["spaces_effective"] / spaces_per_block) * mins_per_block
-                               if seg["spaces_known"] else mins_per_block)
+                    # Block faces vary in length, so one that hasn't been surveyed
+                    # is timed by the spaces its curb could hold (one per
+                    # ft_per_space) instead of as one standard block. Either way
+                    # a block can't take less time than walking it.
+                    est = None if seg["spaces_known"] else int(math.floor(length / ft_per_space + 1e-9))
+                    basis = seg["spaces_effective"] if seg["spaces_known"] else est
+                    minutes = max(basis * min_per_space, length / walk_speed)
                     seg["minutes"] = round(minutes, 2)
                     r_count_ft += length
                     r_count_min += minutes
                     n_blocks += 1
+                seg["spaces_est"] = est
                 r_spaces += seg["spaces_effective"] or 0
+                r_spaces_est += est or 0
 
                 if seg["inv_id"] in seen_ids:
                     duplicate_ids.add(seg["inv_id"])
@@ -431,6 +477,7 @@ def compute(project):
                 seg["id_is_manual"] = False
                 seg["spaces_effective"] = 0
                 seg["spaces_known"] = False
+                seg["spaces_est"] = None
                 minutes = length / walk_speed
                 seg["minutes"] = round(minutes, 2)
                 r_walk_ft += length
@@ -468,11 +515,13 @@ def compute(project):
             "total_mi": round((r_count_ft + r_walk_ft) / 5280.0, 2),
             "count_min": round(r_count_min, 1),
             "walk_min": round(r_walk_min, 1),
-            "total_min": round(r_count_min + r_walk_min, 1),
+            "lot_min": round(r_lot_min, 1),         # suggested or typed; in total_min
+            "total_min": round(r_count_min + r_walk_min + r_lot_min, 1),
             "blocks": n_blocks,             # block faces only
-            "lots": n_lots,                 # not in any time or distance figure
-            "spaces": r_spaces,             # block faces and lots together
+            "lots": n_lots,                 # timed, but add no distance
+            "spaces": r_spaces,             # entered counts, block faces and lots together
             "lot_spaces": r_lot_spaces,
+            "spaces_est": r_spaces_est,     # estimated for the ones not surveyed yet
             "unsurveyed": sum(1 for sg in route["segments"]
                               if sg.get("kind") in ("count", "lot") and not sg.get("spaces_known")),
             "next_id": route.get("end_inv_id") or seq.peek(),
@@ -485,7 +534,9 @@ def compute(project):
         "lots": sum(r["totals"]["lots"] for r in out["routes"]),
         "spaces": sum(r["totals"]["spaces"] for r in out["routes"]),
         "lot_spaces": sum(r["totals"]["lot_spaces"] for r in out["routes"]),
+        "spaces_est": sum(r["totals"]["spaces_est"] for r in out["routes"]),
         "total_mi": round(sum(r["totals"]["total_ft"] for r in out["routes"]) / 5280.0, 2),
+        "lot_min": round(sum(r["totals"]["lot_min"] for r in out["routes"]), 1),
         "total_min": round(sum(r["totals"]["total_min"] for r in out["routes"]), 1),
     }
     return out
@@ -516,7 +567,7 @@ def export_csv(project):
                 "" if seg["kind"] == "lot" else "%.1f" % seg["length_ft"],
                 seg["spaces_effective"] if seg["spaces_known"] else "",
                 "entered" if seg["spaces_known"] else "not surveyed",
-                # Blank, not 0, for lots: they are not timed (see compute).
+                # For a lot this is its suggested (or typed) allowance; see compute.
                 "" if seg["minutes"] is None else "%.2f" % seg["minutes"],
                 "yes" if seg["flagged"] else "",
                 seg.get("note", ""),
@@ -546,7 +597,7 @@ TYPE_NAMES = {"count": "block face", "walk": "walking leg", "lot": "parking lot"
 BLOCK_FIELDS = ("INV_ID", "ROUTE", "ZONE_PREFIX", "WALK_ORDER", "STREET", "LENGTH_FT",
                 "SPACES", "SPACES_SOURCE", "EST_MINUTES", "FLAGGED", "NOTE")
 LOT_FIELDS = ("INV_ID", "ROUTE", "ZONE_PREFIX", "WALK_ORDER", "STREET", "AREA_SQFT",
-              "SPACES", "SPACES_SOURCE", "FLAGGED", "NOTE")
+              "SPACES", "SPACES_SOURCE", "EST_MINUTES", "FLAGGED", "NOTE")
 LINE_FIELDS = ("INV_ID", "ROUTE", "ZONE_PREFIX", "WALK_ORDER", "TYPE", "STREET",
                "LENGTH_FT", "EST_MINUTES", "COLOR")
 ALL_FIELDS = ("INV_ID", "ROUTE", "ZONE_PREFIX", "WALK_ORDER", "TYPE", "STREET", "LENGTH_FT",
@@ -590,7 +641,7 @@ def _gis_props(route, seg, order):
         "LENGTH_FT": None if lot else seg["length_ft"],
         "SPACES": seg["spaces_effective"] if seg["spaces_known"] else None,
         "SPACES_SOURCE": "n/a" if walk else ("entered" if seg["spaces_known"] else "not surveyed"),
-        "EST_MINUTES": seg["minutes"],              # None for lots: they are not timed
+        "EST_MINUTES": seg["minutes"],              # a lot's is its suggested allowance
         "AREA_SQFT": seg.get("area_sqft") if lot else None,
         "FLAGGED": "yes" if seg["flagged"] else "no",
         "NOTE": seg.get("note", ""),
@@ -661,6 +712,7 @@ def _schema_ini(csv_name):
 
 
 def _gis_readme(project, base, layers):
+    s = clean_settings(project.get("settings"))
     files = [
         ("block_faces", "Lines. One per counted block face, with INV_ID (Text)."),
         ("lots", "Polygons. One per parking lot, with INV_ID (Text)."),
@@ -683,7 +735,11 @@ def _gis_readme(project, base, layers):
             "", "ARCGIS ONLINE",
             "  Content > New item > upload one .geojson at a time and create a hosted feature layer.",
             "", "NOTES",
-            "  Parking lots have no EST_MINUTES: lots are not included in route time or distance.",
+            "  A parking lot's EST_MINUTES is a suggested allowance (its spaces, or its area at",
+            "  %g sq ft a space, at the block-face rate) unless a planner typed their own."
+            % s["lot_sqft_per_space"],
+            "  Block faces with no SPACES yet are timed by length, at %g ft of curb a space."
+            % s["ft_per_space"],
             "  WALK_ORDER is each piece's position along its route, walking legs included."]
     return "\r\n".join(out) + "\r\n"
 
@@ -897,9 +953,9 @@ L.control.layers(bases,null,{position:'topright'}).addTo(map);
 // Names, notes and manual IDs are free text; escape them before they become HTML.
 const esc = t => String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;')
   .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const LOT_NOTE = 'Parking lots, and walking into and around them, are not included in the '
-  + 'distance or time. How long a lot takes depends on its layout and how it is counted, '
-  + 'which the map cannot tell.';
+const LOT_NOTE = 'Parking lot times are suggested allowances: each lot’s spaces (from the '
+  + 'survey, or estimated from its area) at the block-face counting rate, unless the planner '
+  + 'set their own. Walking into and around lots adds no distance.';
 const all = [];
 DATA.routes.forEach(rt => {
   const col = esc(rt.color);
@@ -908,10 +964,11 @@ DATA.routes.forEach(rt => {
     all.push(...seg.pts);
     const tip = (seg.inv_id ? '<b>'+esc(seg.inv_id)+'</b><br>' : '')
       + (seg.street ? esc(seg.street)+'<br>' : '')
-      + (seg.kind === 'lot' ? 'Parking lot, not timed'
+      + (seg.kind === 'lot' ? 'Parking lot · allow about '+fmt(seg.minutes)
          : seg.kind === 'walk' ? 'Walking leg, not counted'
-         : Math.round(seg.length_ft)+' ft')
-      + (seg.kind !== 'walk' && seg.spaces_effective ? ' · '+seg.spaces_effective+' spaces' : '')
+         : Math.round(seg.length_ft)+' ft · about '+fmt(seg.minutes))
+      + (seg.kind !== 'walk' && seg.spaces_known ? ' · '+seg.spaces_effective+' spaces'
+         : seg.kind !== 'walk' && seg.spaces_est != null ? ' · ≈'+seg.spaces_est+' spaces (estimate)' : '')
       + (seg.note ? '<br><i>'+esc(seg.note)+'</i>' : '')
       + (seg.flagged ? '<br><b style="color:#E5484D">Flagged for follow-up</b>' : '');
     const shape = seg.kind === 'lot'
@@ -939,23 +996,23 @@ const g = DATA.grand_totals;
 document.getElementById('sub').textContent =
   g.routes+' route'+(g.routes>1?'s':'')+' · '+g.blocks+' block faces'
   + (g.lots ? ' · '+g.lots+' lot'+(g.lots>1?'s':'') : '')
-  + ' · '+g.total_mi+' mi · '+fmt(g.total_min) + (g.lots ? ' · lots not timed' : '');
+  + ' · '+g.total_mi+' mi · '+fmt(g.total_min) + (g.lots ? ' incl. '+fmt(g.lot_min)+' for lots' : '');
 function fmt(m){m=Math.round(m);return m<60?m+' min':Math.floor(m/60)+'h '+String(m%60).padStart(2,'0');}
 
 let html = g.lots ? '<section><p class="lotnote">'+LOT_NOTE+'</p></section>' : '';
 DATA.routes.forEach(rt => {
   const t = rt.totals;
   html += '<section><div class="rt"><span class="dot" style="background:'+esc(rt.color)+'"></span>'+esc(rt.name)+'</div>'
-    + '<dl class="num"><dt>Walking time</dt><dd>'+fmt(t.total_min)+'</dd>'
+    + '<dl class="num"><dt>Route time</dt><dd>'+fmt(t.total_min)+'</dd>'
     + '<dt>Distance</dt><dd>'+t.total_mi+' mi</dd>'
     + '<dt>Block faces</dt><dd>'+t.blocks+'</dd>'
-    + (t.lots ? '<dt>Parking lots</dt><dd>'+t.lots+' · not timed</dd>' : '')
-    + '<dt>Spaces</dt><dd>'+(t.spaces||'—')+'</dd></dl><table>';
+    + (t.lots ? '<dt>Parking lots</dt><dd>'+t.lots+' · '+fmt(t.lot_min)+'</dd>' : '')
+    + '<dt>Spaces</dt><dd>'+(t.spaces||'—')+(t.spaces_est ? ' + ≈'+t.spaces_est+' est.' : '')+'</dd></dl><table>';
   if (rt.start_inv_id) html += '<tr><td><b>'+esc(rt.start_inv_id)+'</b></td><td>start</td></tr>';
   rt.segments.forEach(seg => {
     if (!seg.inv_id) return;
     html += '<tr><td><b>'+esc(seg.inv_id)+'</b>'+(seg.flagged?' <span class="fl">&#9873;</span>':'')+'</td>'
-      + '<td>'+(seg.kind==='lot'?'lot':Math.round(seg.length_ft)+' ft')+'</td></tr>';
+      + '<td>'+(seg.kind==='lot'?'lot · '+fmt(seg.minutes):Math.round(seg.length_ft)+' ft')+'</td></tr>';
   });
   if (rt.end_inv_id && !rt.end_owner) html += '<tr><td><b>'+esc(rt.end_inv_id)+'</b></td><td>end</td></tr>';
   html += '</table></section>';
@@ -1095,7 +1152,33 @@ def list_projects():
 # HTTP
 # ---------------------------------------------------------------------------
 
-STATE = {"project": new_project()}
+# "file" is the saved project the open one belongs to: the one it was opened from
+# or last saved as. Autosave only ever replaces that file (see /api/save).
+STATE = {"project": new_project(), "file": None}
+SAVE_LOCK = threading.Lock()      # the server is threaded; autosave and Save can overlap
+
+
+def save_project(project, force=None):
+    """Write the project to SAVE_DIR and return {"saved", "file"}.
+
+    A save never quietly replaces a different project's file. If a project with
+    this name is already saved and it isn't the one that was opened or saved last,
+    nothing is written and the reply is {"conflict": True} - unless force is True
+    (the Save button asks first). force=None is the old behaviour, which always
+    writes, for older pages and scripts. The write goes to a temporary file first,
+    so a save cut off half way never leaves a broken project behind."""
+    with SAVE_LOCK:
+        path = project_path(project.get("name") or "project")
+        name = os.path.basename(path)[:-5]
+        if force is False and os.path.exists(path) and STATE.get("file") != name:
+            return {"conflict": True, "file": name, "path": path}
+        os.makedirs(SAVE_DIR, exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w") as fh:
+            json.dump(project, fh, indent=1)
+        os.replace(tmp, path)
+        STATE["file"] = name
+        return {"saved": path, "file": name, "at": time.strftime("%H:%M")}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1149,7 +1232,7 @@ class Handler(BaseHTTPRequestHandler):
                     code=502)
         if u.path == "/api/projects":
             return self._send(json.dumps({"projects": list_projects(),
-                                          "dir": SAVE_DIR}))
+                                          "dir": SAVE_DIR, "current": STATE.get("file")}))
         if u.path == "/api/load":
             name = (q.get("name") or [""])[0]
             path = project_path(name)
@@ -1158,6 +1241,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 with open(path) as fh:
                     STATE["project"] = migrate(json.load(fh))
+                STATE["file"] = os.path.basename(path)[:-5]
             except Exception as e:
                 return self._send(json.dumps(
                     {"error": "Could not read %s: %s" % (path, e)}), code=500)
@@ -1200,14 +1284,20 @@ class Handler(BaseHTTPRequestHandler):
             STATE["project"] = payload
             return self._send(json.dumps(compute(STATE["project"])))
         if u.path == "/api/save":
-            STATE["project"] = payload.get("project", STATE["project"])
-            os.makedirs(SAVE_DIR, exist_ok=True)
-            path = project_path(STATE["project"].get("name", "project"))
-            with open(path, "w") as fh:
-                json.dump(STATE["project"], fh, indent=1)
-            return self._send(json.dumps({"saved": path}))
+            # Save, autosave and the last-moment save when the tab closes all
+            # come here. They send "force": false, so they never replace another
+            # project's file; see save_project.
+            STATE["project"] = payload.get("project") or STATE["project"]
+            force = payload.get("force") if "force" in payload else None
+            try:
+                return self._send(json.dumps(save_project(STATE["project"], force)))
+            except OSError as e:
+                return self._send(json.dumps({"error": "Could not save: %s" % e}), code=500)
         if u.path == "/api/new":
+            # Also used before opening a file from disk, so that file starts out
+            # tied to nothing and autosave can't write it over a saved project.
             STATE["project"] = new_project(payload.get("name") or "Untitled study area")
+            STATE["file"] = None
             return self._send(json.dumps(compute(STATE["project"])))
         self._send(json.dumps({"error": "Not found"}), code=404)
 
@@ -1294,6 +1384,8 @@ header h1 span{color:var(--muted);font-weight:400}
 .hbtn:hover{border-color:var(--muted)}
 .hbtn.go{background:var(--accent);border-color:var(--accent);color:#1B2430;font-weight:600}
 .opt{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;white-space:nowrap}
+/* A select is as wide as its longest option; the open list still shows them in full. */
+#bExport{width:96px} #bLoad{width:118px}
 
 #rail{grid-area:rail;background:var(--ink2);border-right:1px solid var(--line);
   overflow-y:auto;padding:14px}
@@ -1372,13 +1464,15 @@ section:last-child{border-bottom:0}
   padding:1px 3px;width:38px;margin-left:-3px}
 .endpt.isend{box-shadow:0 1px 6px rgba(0,0,0,.55), inset 0 0 0 2px rgba(255,255,255,.85)}
 .idlabel{cursor:grab}
-#lotbar{display:none;align-items:center;gap:9px;margin-top:9px;padding:8px 10px;
+#lotbar,#bendbar{display:none;align-items:center;gap:9px;margin-top:9px;padding:8px 10px;
   background:var(--ink3);border:1px solid var(--accent);border-radius:7px}
-#lotbar span{flex:1;color:var(--muted);font-size:12.5px}
-#lotfinish{background:var(--accent);border:1px solid var(--accent);border-radius:5px;
+#lotbar span,#bendbar span{flex:1;color:var(--muted);font-size:12.5px}
+#lotfinish,#bendfinish{background:var(--accent);border:1px solid var(--accent);border-radius:5px;
   color:#1B2430;font-weight:600;padding:5px 10px}
 #lotfinish:disabled{opacity:.45;cursor:default}
-#lotcancel{background:transparent;border:1px solid var(--line);border-radius:5px;padding:5px 10px}
+#lotcancel,#bendundo{background:transparent;border:1px solid var(--line);border-radius:5px;padding:5px 10px}
+#savestate{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+#savestate.bad{color:var(--flag)}
 .addgap{display:block;width:100%;background:transparent;border:1px dashed var(--line);border-radius:7px;
   margin-bottom:6px;padding:6px 10px;color:var(--muted);font-size:12px;text-align:left}
 .addgap:hover,.mini.addafter:hover{color:var(--accent);border-color:var(--accent)}
@@ -1406,17 +1500,27 @@ kbd{background:var(--ink3);border:1px solid var(--line);border-radius:3px;paddin
   <button class="hbtn" id="bImport">Import file…</button>
   <button class="hbtn" id="bMerge" title="Add another project's routes alongside these">Merge file…</button>
   <input type="file" id="fileIn" accept=".json,application/json" style="display:none">
-  <button class="hbtn go" id="bSave">Save</button>
-  <select id="bExport" class="hbtn">
+  <button class="hbtn go" id="bSave" title="Save to the projects folder on this computer. Reopen it from Open…">Save</button>
+  <label class="opt" title="Save to the projects folder a moment after every change">
+    <input type="checkbox" id="optAuto" checked> autosave
+  </label>
+  <!-- Only the project file can be opened again here, so it comes first and says so. -->
+  <select id="bExport" class="hbtn" title="To pick up where you left off, export the Project file (JSON) and open it again with Import file…. The other exports can't be reopened in Route Mapper.">
     <option value="">Export…</option>
-    <option value="csv">Inventory IDs (CSV)</option>
-    <option value="pdf">Plan sheet (PDF)</option>
-    <option value="png">Image (PNG)</option>
-    <option value="svg">Vector (SVG)</option>
-    <option value="gis">GIS layers for ArcGIS (.zip)</option>
-    <option value="geojson">GeoJSON, one file (QGIS)</option>
-    <option value="viewer">Shareable viewer (HTML)</option>
-    <option value="json">Project file (JSON)</option>
+    <optgroup label="To keep working later">
+      <option value="json">Project file (JSON) · best for picking up later</option>
+    </optgroup>
+    <optgroup label="For Survey123 and GIS">
+      <option value="csv">Inventory IDs (CSV)</option>
+      <option value="gis">GIS layers for ArcGIS (.zip)</option>
+      <option value="geojson">GeoJSON, one file (QGIS)</option>
+    </optgroup>
+    <optgroup label="To print or share">
+      <option value="pdf">Plan sheet (PDF)</option>
+      <option value="png">Image (PNG)</option>
+      <option value="svg">Vector (SVG)</option>
+      <option value="viewer">Shareable viewer (HTML)</option>
+    </optgroup>
   </select>
   <label class="opt" title="Draw the map behind SVG and PNG exports. PDF stays vector-only.">
     <input type="checkbox" id="optMapBg" checked> map behind
@@ -1453,15 +1557,24 @@ kbd{background:var(--ink3);border:1px solid var(--line);border-radius:3px;paddin
       <button id="lotcancel">Discard</button>
       <button id="lotfinish">Finish shape</button>
     </div>
+    <div id="bendbar">
+      <span id="bendcount"></span>
+      <button id="bendundo" title="Take back the last bend (Backspace)">Undo bend</button>
+      <button id="bendfinish" title="End the block at the last bend (Enter)">End here</button>
+    </div>
     <p class="tiny" style="margin:9px 0 0">Click along the street to lay the route down.
     Each click closes the leg behind it, so switching between counting and walking
-    mid-route just means clicking the other tool and carrying on. A parking lot is tied
+    mid-route just means clicking the other tool and carrying on. <b>On a curved street,
+    hold <kbd>Shift</kbd> while you click</b> to bend the block along the curve instead of
+    ending it; it stays one block with one ID, and the next plain click ends it. Already
+    split a curve into several IDs? Open the first one and click <b>Merge with next</b>
+    (or press <kbd>M</kbd>). A parking lot is tied
     to the route by a line where it is counted; click the lot to see the line, and drag
     its end along the route to move the lot in the walking order. Missed a block? Turn on
     <b>＋ Insert a block</b> (or press <kbd>I</kbd>) and drag the white handle in the middle of a
     line: the block splits there and the IDs after it renumber. Right-click and drag to rotate
     the map.
-    <kbd>C</kbd> count · <kbd>W</kbd> walk · <kbd>L</kbd> lot · <kbd>A</kbd> direction arrows · <kbd>I</kbd> insert a block · <kbd>F</kbd> flip the selected block · <kbd>P</kbd> corner handles · <kbd>Esc</kbd> select · <kbd>⌘Z</kbd> undo · <kbd>⇧⌘Z</kbd> redo · <kbd>Delete</kbd> removes the selected block. Drag an ID to move that block face, or drag a corner handle or endpoint to adjust the line. A selected block shows its own two ends as blue tabs: drag one to pull just that end away (it keeps its number), and drop it on another block's end to join them.</p>
+    <kbd>C</kbd> count · <kbd>W</kbd> walk · <kbd>L</kbd> lot · <kbd>⇧</kbd>-click bend the block · <kbd>A</kbd> direction arrows · <kbd>I</kbd> insert a block · <kbd>F</kbd> flip the selected block · <kbd>M</kbd> merge it with the next · <kbd>P</kbd> corner handles · <kbd>Esc</kbd> select · <kbd>⌘Z</kbd> undo · <kbd>⇧⌘Z</kbd> redo · <kbd>Delete</kbd> removes the selected block. Drag an ID to move that block face, or drag a corner handle or endpoint to adjust the line. A selected block shows its own two ends as blue tabs: drag one to pull just that end away (it keeps its number), and drop it on another block's end to join them.</p>
   </section>
 
   <section>
@@ -1503,11 +1616,14 @@ kbd{background:var(--ink3);border:1px solid var(--line);border-radius:3px;paddin
     <h2>Timing model</h2>
     <div class="rowline"><label for="sMin">Minutes per block</label><input id="sMin" type="number" step="0.25" min="0"></div>
     <div class="rowline"><label for="sSp">Spaces that counts as a block</label><input id="sSp" type="number" step="1" min="1"></div>
+    <div class="rowline"><label for="sFt">Feet of curb per space</label><input id="sFt" type="number" step="1" min="1"></div>
+    <div class="rowline"><label for="sLot">Lot sq ft per space</label><input id="sLot" type="number" step="5" min="1"></div>
     <div class="rowline"><label for="sWalk">Walking pace, ft/min</label><input id="sWalk" type="number" step="10" min="1"></div>
     <div class="rowline"><label for="sSkip">Skip 10, 20, 30…</label><input id="sSkip" type="checkbox" style="width:auto"></div>
-    <p class="tiny">A block face takes <span id="fx" class="num"></span>. Walk-only legs count
-    their walking time (distance ÷ pace) but no counting time. Fruitvale and Grand Lake both skip every multiple of ten in their
-    IDs, so that stays on unless a new study area drops the convention.</p>
+    <p class="tiny" id="fx"></p>
+    <p class="tiny">Walk-only legs count their walking time (distance ÷ pace) but no counting
+    time. Fruitvale and Grand Lake both skip every multiple of ten in their IDs, so that stays
+    on unless a new study area drops the convention.</p>
   </section>
 
   <section>
@@ -1518,9 +1634,7 @@ kbd{background:var(--ink3);border:1px solid var(--line);border-radius:3px;paddin
   <section>
     <h2>All routes</h2>
     <dl class="stats num" id="gstats"></dl>
-    <p class="tiny lotnote" id="lotnote">Parking lots, and walking into and around them,
-    are not included in the distance or time. How long a lot takes depends on its layout
-    and how it is counted, which the map cannot tell.</p>
+    <p class="tiny lotnote" id="lotnote"></p>
   </section>
 </div>
 
@@ -1536,6 +1650,7 @@ kbd{background:var(--ink3);border:1px solid var(--line);border-radius:3px;paddin
   <span id="hint">Pick a drawing tool to begin.</span>
   <div class="spacer"></div>
   <span id="saved"></span>
+  <span id="savestate"></span>
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1556,7 +1671,8 @@ window.addEventListener('unhandledrejection', e =>
 let P = null, tool = 'none', activeRoute = 0, selected = null, lotPts = [],
     lotFor = null, toolBeforeLot = 'none',
     dragging = false, showPts = true, jointsOn = true, snapOn = true, mergeMode = false,
-    breakAway = false, selVertex = null;
+    breakAway = false, selVertex = null,
+    bendPts = [];   // Shift-clicked bends of the block being drawn, not yet part of P
 let undoStack = [], redoStack = [], snapshot = null;
 
 // Opens on all of Oakland (a project's own saved view takes over once it loads).
@@ -1987,6 +2103,7 @@ function note(msg, bad){
 // made while it was in flight is never overwritten.
 let sending = null, queued = null;
 function push(record){
+  edited();
   if (record !== false && snapshot){
     undoStack.push(snapshot);
     if (undoStack.length > 80) undoStack.shift();
@@ -2041,7 +2158,8 @@ function strip(p){
   c.routes.forEach(r => { delete r.totals; delete r.start_at; delete r.end_at;
     delete r.start_inv_id; delete r.end_inv_id; delete r.start_owner; delete r.end_owner; delete r.first_id; delete r.last_id;
     r.segments.forEach(s => {['length_ft','label_at','label_custom','inv_id','minutes',
-      'spaces_effective','spaces_known','id_is_manual','area_sqft','perimeter_ft','anchor_at']
+      'spaces_effective','spaces_known','spaces_est','minutes_suggested','id_is_manual',
+      'area_sqft','perimeter_ft','anchor_at']
       .forEach(k => delete s[k]);}); });
   delete c.lots;
   return c;
@@ -2176,6 +2294,40 @@ function flipLeg(rt, seg){
   seg.pts.reverse();
   push().then(() => note('Flipped ' + (seg.inv_id || 'the walking leg') + '; its arrows now point the other way.'));
 }
+// Join a block to the one after it, keeping every corner so the shape doesn't
+// change: one block, one ID. This is how a curve that was clicked as several short
+// blocks (each with its own ID) becomes one block again. Removing the joint with
+// Delete also merges, but it straightens the line across the missing corner.
+function mergeWithNext(rt, seg){
+  const legs = rt.segments.filter(x => x.kind !== 'lot' && x.pts.length >= 2);
+  const next = legs[legs.indexOf(seg) + 1];
+  const what = seg.inv_id || 'this walking leg';
+  if (!next) return note('Nothing comes after ' + what + ' to merge with.', true);
+  if (next.kind !== seg.kind)
+    return note(what + ' and the leg after it are not the same kind (one is walk-only). '
+      + 'Use Make it a counted block / Make it walk-only first.', true);
+  if (!samePt(seg.pts[seg.pts.length - 1], next.pts[0]))
+    return note(what + ' does not end where the next block starts. Join them first by dragging '
+      + 'its end tab onto the next block\'s start.', true);
+  const gone = next.inv_id, oneCount = (seg.spaces == null) !== (next.spaces == null);
+  seg.pts = seg.pts.concat(next.pts.slice(1).map(q => q.slice()));
+  if (seg.spaces != null || next.spaces != null) seg.spaces = (seg.spaces || 0) + (next.spaces || 0);
+  seg.street = seg.street || next.street;
+  seg.note = [seg.note, next.note].filter((t, i, a) => t && a.indexOf(t) === i).join(' · ');
+  seg.flagged = !!(seg.flagged || next.flagged);
+  if (next.is_route_end){ seg.is_route_end = true; seg.is_route_start = false; }
+  // Lots tied to the absorbed block stay where they are, now on this one.
+  rt.segments.forEach(l => { if (l.kind === 'lot' && l.anchor_leg === next.uid) l.anchor_leg = seg.uid; });
+  rt.segments = rt.segments.filter(x => x !== next);
+  selected = seg.uid;
+  push().then(() => {
+    const r = P.routes.find(x => x.uid === rt.uid) || rt;
+    const me = (r.segments.find(x => x.uid === seg.uid) || {}).inv_id;
+    note(me ? 'Merged ' + (gone || 'the next block') + ' into ' + me + '; the IDs after it moved up one.'
+              + (oneCount ? ' Only one half had a space count, so check it.' : '')
+            : 'Merged the two walking legs.');
+  });
+}
 // ---- end of inserting a block --------------------------------------------------
 function snapTarget(pt, ignoreSeg){
   if (!snapOn) return null;
@@ -2302,22 +2454,60 @@ map.on('click', e => {
     const rt = R();
     const prev = lastVertex();
     if (!prev){ rt.start = pt; return push(); }
-    rt.segments.push(mkSeg(tool, [prev, pt]));
-    return push();
+    const tail = bendPts.length ? bendPts[bendPts.length - 1] : prev;
+    // Shift (or Alt/Option) bends the block here instead of ending it, so a curved
+    // street stays one block with one ID and still follows the curb.
+    const ev = e.originalEvent || {};
+    if (ev.shiftKey || ev.altKey){
+      if (nearPx(pt, tail, 6)) return;
+      bendPts.push(pt);
+      return drawDraft();
+    }
+    // A second click on the point just placed (a double-click, say) used to lay
+    // a block a few feet long with an ID of its own. It now ends the block there.
+    if (nearPx(pt, tail, 6)){
+      if (!bendPts.length) return;
+      return finishBends();
+    }
+    rt.segments.push(mkSeg(tool, [prev].concat(bendPts, [pt])));
+    const bent = bendPts.length;
+    bendPts = []; drawDraft();
+    push();
+    if (bent) note('Laid one ' + (tool === 'count' ? 'block' : 'walking leg') + ' through '
+      + bent + ' bend' + (bent > 1 ? 's' : '') + '.');
+    return;
   }
 });
+// Ends the block being bent at its last bend, as if that bend had been a plain
+// click. Switching tools or routes does this too, so bends are never lost.
+function finishBends(){
+  if (!bendPts.length) return false;
+  const rt = R(), prev = lastVertex(), pts = bendPts;
+  bendPts = []; drawDraft();
+  if (!prev || !(tool === 'count' || tool === 'walk')) return false;
+  rt.segments.push(mkSeg(tool, [prev].concat(pts)));
+  push();
+  return true;
+}
+function undoBend(){
+  if (!bendPts.length) return false;
+  bendPts.pop(); drawDraft();
+  note(bendPts.length ? 'Took back the last bend.' : 'Took back the bend. The next click ends a straight block.');
+  return true;
+}
 map.on('dblclick', () => { if (tool === 'lot') finishLot(); });
 map.on('mousemove', e => {
   const from = P && (tool === 'count' || tool === 'walk') && lastVertex();
   if (!from) return rubber.remove();
-  rubber.setLatLngs([from, e.latlng]);
+  rubber.setLatLngs([from].concat(bendPts, [e.latlng]));
   if (!map.hasLayer(rubber)) rubber.addTo(map);
 });
 map.on('mouseout', () => rubber.remove());
 
-function near(a, b){
+function near(a, b){ return nearPx(a, b, 14); }   // ~a fingertip on screen
+function nearPx(a, b, px){
   const pa = map.latLngToContainerPoint(a), pb = map.latLngToContainerPoint(b);
-  return Math.hypot(pa.x-pb.x, pa.y-pb.y) < 14;   // ~a fingertip on screen
+  return Math.hypot(pa.x-pb.x, pa.y-pb.y) < px;
 }
 // ---- parking lots --------------------------------------------------------
 // Draw a lot's outline with the Parking lot tool. A line then ties the lot to
@@ -2525,6 +2715,14 @@ function deleteSelected(){
 }
 function drawDraft(){
   draft.clearLayers();
+  if (bendPts.length){
+    const from = lastVertex(), col = R().color;
+    if (from) L.polyline([from].concat(bendPts), {color: col, weight: tool === 'count' ? 6 : 3,
+      opacity: .55, dashArray: tool === 'count' ? null : '9 8', interactive: false}).addTo(draft);
+    bendPts.forEach(pt => L.circleMarker(pt, {radius: 4, color: '#fff', weight: 2,
+      fillColor: col, fillOpacity: 1, interactive: false}).addTo(draft));
+  }
+  updateBendBar();
   // While redrawing, keep the old outline lit up so it is clear which lot changes.
   const target = lotFor && lotTarget();
   if (target) L.polygon(target.pts, {color:'#5AA9F2', weight:3, opacity:.55, fill:false,
@@ -2538,6 +2736,13 @@ function drawDraft(){
   }
   updateLotBar();
 }
+function updateBendBar(){
+  const bar = $('#bendbar');
+  if (!bendPts.length){ bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  $('#bendcount').textContent = 'Curving one ' + (tool === 'count' ? 'block' : 'walking leg') + ' · '
+    + bendPts.length + (bendPts.length === 1 ? ' bend' : ' bends') + '. Click without Shift where it ends.';
+}
 function updateLotBar(){
   const bar = $('#lotbar');
   const target = lotFor && lotTarget();
@@ -2548,6 +2753,11 @@ function updateLotBar(){
   $('#lotfinish').disabled = lotPts.length < 3;
 }
 function setTool(t){
+  if (t !== tool) finishBends();
+  // Shift-drag is Leaflet's box zoom, and a Shift-click that wobbles a pixel
+  // would zoom into a tiny box. Shift-click bends a block, so box zoom is off
+  // while drawing legs.
+  if (t === 'count' || t === 'walk') map.boxZoom.disable(); else map.boxZoom.enable();
   if (tool === 'lot' && t !== 'lot' && lotPts.length >= 3) finishLot();
   if (t === 'lot' && tool !== 'lot') toolBeforeLot = tool;
   if (t !== 'none') insertMode = false;          // drawing tools end Insert a block
@@ -2555,8 +2765,8 @@ function setTool(t){
   tool = t;
   document.querySelectorAll('.tool').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   const hints = {
-    count:'Click along the street. Each click ends a block face and starts the next.',
-    walk:'Click along the connector. These legs are dashed and never get an ID.',
+    count:'Click along the street. Each click ends a block face and starts the next. On a curve, hold Shift as you click to bend the block; it keeps one ID.',
+    walk:'Click along the connector. These legs are dashed and never get an ID. Hold Shift as you click to bend one.',
     lot: (lotFor ? 'Click the new corners for this lot.' : 'Click the corners of the lot.')
       + ' Close it by clicking the first corner again, pressing Enter, or double-clicking.',
     flag:'Click a block or lot to circle it in red for follow-up.',
@@ -2572,9 +2782,20 @@ $('#optSnap').onchange = e => { snapOn = e.target.checked; };
 $('#optJoints').onchange = e => { jointsOn = e.target.checked; };
 $('#lotfinish').onclick = () => finishLot();
 $('#lotcancel').onclick = () => { lotPts = []; lotFor = null; setTool('lot'); };
+$('#bendundo').onclick = () => undoBend();
+$('#bendfinish').onclick = () => finishBends();
 document.addEventListener('keyup', e => { if (!e.altKey) breakAway = false; });
 document.addEventListener('keydown', e => {
   if (e.altKey) breakAway = true;
+  // While a block is being bent, Enter ends it at the last bend, and Backspace or
+  // undo take back one bend rather than touching the route.
+  if (bendPts.length && !['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)){
+    if (e.key === 'Enter'){ e.preventDefault(); return finishBends(); }
+    if (e.key === 'Backspace' || e.key === 'Delete'
+        || ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z')){
+      e.preventDefault(); return undoBend();
+    }
+  }
   // Click a corner handle, press Delete, and the joint goes - the two legs it
   // separated are merged into one.
   if ((e.key === 'Delete' || e.key === 'Backspace') && selVertex
@@ -2591,6 +2812,10 @@ document.addEventListener('keydown', e => {
   if (e.key === 'f' && selected){
     const seg = R().segments.find(x => x.uid === selected);
     if (seg && seg.kind !== 'lot') return flipLeg(R(), seg);
+  }
+  if (e.key === 'm' && selected){
+    const seg = R().segments.find(x => x.uid === selected);
+    if (seg && seg.kind !== 'lot') return mergeWithNext(R(), seg);
   }
   if (e.key === 'c') setTool('count');
   else if (e.key === 'w') setTool('walk');
@@ -2724,7 +2949,7 @@ function render(){
     const b = document.createElement('button');
     b.className = 'tab' + (i === activeRoute ? ' on' : '');
     b.innerHTML = '<span class="dot" style="background:'+esc(rt.color)+'"></span>'+esc(rt.name);
-    b.onclick = () => { activeRoute = i; selected = null; render(); };
+    b.onclick = () => { finishBends(); activeRoute = i; selected = null; render(); };
     b.oncontextmenu = ev => { ev.preventDefault(); rt.visible = !rt.visible; push(); };
     b.title = rt.visible ? 'Right-click to hide this route' : 'Hidden — right-click to show';
     if (!rt.visible) b.style.opacity = .45;
@@ -2735,22 +2960,35 @@ function render(){
 
   const s = P.settings;
   $('#sMin').value = s.minutes_per_block; $('#sSp').value = s.spaces_per_block;
+  $('#sFt').value = s.ft_per_space; $('#sLot').value = s.lot_sqft_per_space;
   $('#sWalk').value = s.walk_speed_ft_per_min; $('#sSkip').checked = s.skip_multiples_of_ten;
-  $('#fx').textContent = s.minutes_per_block + ' min per ' + s.spaces_per_block + ' spaces';
+  // The rule in words, using the numbers above. compute() does the arithmetic;
+  // this only restates the settings.
+  const n = v => +(+v).toFixed(2);
+  $('#fx').innerHTML = 'A block face takes <b class="num">' + n(s.minutes_per_block) + ' min per '
+    + n(s.spaces_per_block) + ' spaces</b>, which is about ' + n(s.spaces_per_block * s.ft_per_space)
+    + ' ft of curb at ' + n(s.ft_per_space) + ' ft a space, so a longer block takes longer. Until its '
+    + 'space count is entered, a block is timed by its length; after that, by its spaces. Either way '
+    + 'it never takes less than walking it. A parking lot gets a suggested time at the same rate: its '
+    + 'surveyed spaces, or its area ÷ ' + n(s.lot_sqft_per_space) + ' sq ft.';
 
   const t = rt.totals;
   $('#rstats').innerHTML =
-    row('Walking time', fmtMin(t.total_min), true) +
+    row('Route time', fmtMin(t.total_min), true) +
     row('Total distance', t.total_mi + ' mi', true) +
-    row('Block faces', t.blocks) + lotsRow(t) + row('Spaces', t.spaces) +
+    row('Block faces', t.blocks) + lotsRow(t) + spacesRow(t) +
     row('Counting', fmtMin(t.count_min) + ' · ' + fmtFt(t.count_ft)) +
     row('Walking only', fmtMin(t.walk_min) + ' · ' + fmtFt(t.walk_ft)) +
     row('Next ID', esc(t.next_id));
   const g = P.grand_totals;
   $('#gstats').innerHTML = row('Routes', g.routes) + row('Block faces', g.blocks) +
-    lotsRow(g) + row('Spaces', g.spaces) + row('Distance', g.total_mi + ' mi') +
+    lotsRow(g) + spacesRow(g) + row('Distance', g.total_mi + ' mi') +
     row('Time', fmtMin(g.total_min));
   $('#lotnote').style.display = g.lots ? 'block' : 'none';
+  $('#lotnote').textContent = 'Parking lot times are suggestions: each lot\u2019s spaces (from the '
+    + 'survey, or its area ÷ ' + n(s.lot_sqft_per_space) + ' sq ft) at the block-face counting rate. '
+    + 'The map can\u2019t see levels or aisle layout, so open a lot and type your own minutes when you '
+    + 'know better. Walking into and around lots adds no distance.';
 
   drawArrows();
   renderList();
@@ -2759,7 +2997,12 @@ function row(k, v, big){
   return '<dt>'+k+'</dt><dd'+(big?' class="big"':'')+'>'+v+'</dd>';
 }
 function lotsRow(t){
-  return t.lots ? row('Parking lots', t.lots + ' · not timed') : '';
+  return t.lots ? row('Parking lots', t.lots + ' · ' + fmtMin(t.lot_min)) : '';
+}
+// Entered counts, plus an estimate for blocks and lots not surveyed yet.
+function spacesRow(t){
+  return row('Spaces', t.spaces + (t.spaces_est ? ' <span title="Estimated from length and area for the '
+    + 'blocks and lots not surveyed yet">+ ≈' + t.spaces_est + ' est.</span>' : ''));
 }
 function fmtMin(m){
   m = Math.round(m); return m < 60 ? m+' min' : Math.floor(m/60)+'h '+String(m%60).padStart(2,'0');
@@ -2797,9 +3040,13 @@ function blockRow(seg, i, rt){
   d.dataset.uid = seg.uid;
 
   const head = document.createElement('div'); head.className = 'blkhead';
-  const sp = seg.spaces_known ? seg.spaces_effective + ' sp' : 'not surveyed';
+  // An estimate never reads as a count: it carries ≈ and "est.".
+  const sp = seg.spaces_known ? seg.spaces_effective + ' sp'
+           : seg.spaces_est != null ? '≈' + seg.spaces_est + ' sp est.' : 'not surveyed';
+  const typedMin = isLot && seg.minutes_manual != null && seg.minutes_manual !== '';
   const meta = isLot
-    ? 'lot · ' + Math.round(seg.area_sqft).toLocaleString() + ' sq ft · ' + sp + ' · not timed'
+    ? 'lot · ' + Math.round(seg.area_sqft).toLocaleString() + ' sq ft · ' + sp + ' · '
+      + seg.minutes.toFixed(1) + ' min' + (typedMin ? '' : ' suggested')
     : Math.round(seg.length_ft) + ' ft'
       + (seg.kind === 'count' ? ' · ' + sp + ' · ' + seg.minutes.toFixed(1) + ' min'
                               : ' · walk only · ' + seg.minutes.toFixed(1) + ' min');
@@ -2871,6 +3118,21 @@ function blockRow(seg, i, rt){
   noteIn.onchange = () => { seg.note = noteIn.value; push(); };
   body.appendChild(noteIn);
 
+  // A lot's time is a suggestion until someone who knows the lot types their own.
+  if (isLot){
+    const minIn = inp(typedMin ? seg.minutes_manual : '',
+      'Minutes to allow (suggested: ' + seg.minutes_suggested.toFixed(1) + ')');
+    minIn.type = 'number'; minIn.min = 0; minIn.step = 0.5;
+    minIn.title = 'Leave empty to use the suggestion. Type minutes to allow your own, for '
+      + 'example for a garage with several levels.';
+    minIn.onchange = () => {
+      const x = parseFloat(minIn.value);
+      seg.minutes_manual = isFinite(x) && x >= 0 ? x : null;
+      push();
+    };
+    body.appendChild(minIn);
+  }
+
   const acts = document.createElement('div'); acts.className = 'f2';
   if (!isLot){
     const swap = document.createElement('button'); swap.className = 'hbtn';
@@ -2924,6 +3186,12 @@ function blockRow(seg, i, rt){
     flip.title = 'Reverse this block so its arrows point the other way (F)';
     flip.onclick = () => flipLeg(rt, seg);
     acts2.appendChild(flip);
+    const merge = document.createElement('button'); merge.className = 'hbtn';
+    merge.textContent = 'Merge with next';
+    merge.title = 'Join the next block onto this one, keeping its shape: one block, one ID (M). '
+      + 'Use it when a curve was drawn as several blocks.';
+    merge.onclick = () => mergeWithNext(rt, seg);
+    acts2.appendChild(merge);
   }
 
   // Marking a block or lot as the route's own start or end. Useful when the walk
@@ -2955,15 +3223,21 @@ function blockRow(seg, i, rt){
 
   if (seg.kind !== 'walk' && (isLot || !seg.spaces_known)){
     const p = document.createElement('p'); p.className = 'tiny';
+    const s = P.settings;
+    const basis = seg.spaces_known ? seg.spaces_effective + ' surveyed spaces'
+      : '≈' + seg.spaces_est + ' spaces, estimated from its area at ' + s.lot_sqft_per_space + ' sq ft each';
     p.textContent = !isLot
-      ? 'No space count yet. Until the inventory survey comes back this block is '
-        + 'costed at one block of walking time.'
+      ? 'No space count yet, so this block is timed by its length: about ' + seg.spaces_est
+        + ' spaces at ' + s.ft_per_space + ' ft of curb each. Enter the survey count to replace '
+        + 'the estimate. The estimate is never exported as a count.'
       : (seg.anchor_at
           ? 'Counted where its line meets the route (shown on the map while this lot is '
             + 'selected). Drag the end of the line along the route to move it. '
           : 'Not tied to the route yet, so it keeps its place in this list. '
             + 'Attach to the route to place it with a line. ')
-        + 'Lots are not included in the time or distance.';
+        + 'Suggested time: ' + seg.minutes_suggested.toFixed(1) + ' min, for ' + basis
+        + ' at the block-face rate. ' + (typedMin ? 'Your ' + seg.minutes.toFixed(1)
+          + ' min is used instead. ' : '') + 'A lot adds no distance.';
     body.appendChild(p);
   }
   d.appendChild(body);
@@ -3026,10 +3300,14 @@ $('#rprefix').onchange = e => { R().prefix = parseInt(e.target.value||'1',10); p
 $('#rcolor').oninput = e => { R().color = e.target.value; render(); };
 $('#rcolor').onchange = e => { R().color = e.target.value; push(); };
 $('#pname').onchange = e => { P.name = e.target.value; push(); };
-['sMin','sSp','sWalk'].forEach(id => $('#'+id).onchange = () => {
-  P.settings.minutes_per_block = parseFloat($('#sMin').value);
-  P.settings.spaces_per_block = parseFloat($('#sSp').value);
-  P.settings.walk_speed_ft_per_min = parseFloat($('#sWalk').value);
+// An emptied box goes up as null and comes back as the default (clean_settings).
+['sMin','sSp','sFt','sLot','sWalk'].forEach(id => $('#'+id).onchange = () => {
+  const v = id => { const x = parseFloat($('#'+id).value); return isFinite(x) ? x : null; };
+  P.settings.minutes_per_block = v('sMin');
+  P.settings.spaces_per_block = v('sSp');
+  P.settings.ft_per_space = v('sFt');
+  P.settings.lot_sqft_per_space = v('sLot');
+  P.settings.walk_speed_ft_per_min = v('sWalk');
   push();
 });
 $('#sSkip').onchange = e => { P.settings.skip_multiples_of_ten = e.target.checked; push(); };
@@ -3056,31 +3334,125 @@ $('#bDelRoute').onclick = () => {
   if (!confirm('Delete "'+R().name+'" and everything drawn on it?')) return;
   P.routes.splice(activeRoute,1); activeRoute = 0; selected = null; push();
 };
-$('#bSave').onclick = async () => {
+// ---- saving, autosave and leaving the page --------------------------------
+// Every edit goes through push(), which bumps editVer. A save records the editVer
+// it wrote, so there are unsaved changes exactly when editVer !== savedVer.
+// With autosave on (the default; the choice is remembered in this browser) the
+// project is written a moment after each change, to the same file Save uses. It
+// never replaces a different project's file: the server refuses (save_project),
+// the footer says so, and Save asks before replacing it.
+let editVer = 0, savedVer = 0, saveTimer = 0, saveChain = Promise.resolve(),
+    saveConflict = null, saveError = null, saveStatus = '', knownProjects = new Set();
+let autosaveOn = true;
+try { autosaveOn = localStorage.getItem('route-mapper-autosave') !== 'off'; } catch (e) {}
+const unsaved = () => editVer !== savedVer;
+function edited(){
+  editVer++;
+  clearTimeout(saveTimer);
+  if (autosaveOn) saveTimer = setTimeout(() => saveNow({}), 1500);
+  showSaveState();
+}
+// After opening, importing or starting a project: nothing on screen is unsaved.
+function markClean(status){
+  savedVer = editVer; saveConflict = null; saveError = null; saveStatus = status || '';
+  clearTimeout(saveTimer); showSaveState();
+}
+// One save at a time, in order.
+function saveNow(opts){
+  const run = () => doSave(opts || {});
+  return (saveChain = saveChain.then(run, run));
+}
+async function doSave({manual, force}){
+  clearTimeout(saveTimer);
+  while (sending){ try { await sending; } catch (e) {} }   // let the last edit land first
+  if (!manual && !unsaved()) return true;
+  const ver = editVer;
+  let r;
   try {
-    const r = await api('/api/save', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({project: strip(P)})});
-    note('Saved to ' + r.saved);
-    loadProjectList();
-  } catch (err) {}
+    r = await api('/api/save', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({project: strip(P), force: !!force})});
+  } catch (err) {
+    saveError = (err && err.message) || String(err); showSaveState(); return false;
+  }
+  if (r.conflict){
+    if (manual && confirm('A different saved project is already called "' + r.file + '".\n\n'
+        + 'Replace it with this one? Choose Cancel to keep it, then rename this study area.'))
+      return doSave({manual: true, force: true});
+    saveConflict = r.file; showSaveState();
+    if (manual) note('Not saved. Rename this study area to save it next to "' + r.file + '".', true);
+    return false;
+  }
+  saveConflict = null; saveError = null; savedVer = ver;
+  saveStatus = (manual ? 'Saved' : 'Autosaved') + ' to ' + r.file + '.json at '
+    + new Date().toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
+  showSaveState();
+  if (manual) note('Saved to ' + r.saved);
+  if (!knownProjects.has(r.file)) loadProjectList();
+  return true;
+}
+function showSaveState(){
+  const el = $('#savestate');
+  let text = saveStatus, bad = false;
+  if (saveError){
+    bad = true;
+    text = 'Not saved (' + saveError + '). Is Route Mapper still running? Export… › Project file keeps a copy.';
+  } else if (saveConflict && unsaved()){
+    bad = true;
+    text = 'Not autosaved: another saved project is called "' + saveConflict
+      + '". Rename this study area, or click Save to replace it.';
+  } else if (unsaved()) text = autosaveOn ? 'Saving…' : 'Unsaved changes';
+  el.textContent = text; el.title = text; el.className = bad ? 'bad' : '';
+}
+// Before New, Open or Import replace what is on screen.
+async function okToReplace(action){
+  if (!unsaved()) return true;
+  if (autosaveOn && !saveConflict && await saveNow({})) return true;
+  return confirm('Your latest changes to "' + P.name + '" are not saved.\n\n' + action
+    + ' anyway and lose them?');
+}
+// Closing or reloading the tab with changes that aren't on disk yet asks first.
+// Browsers show their own "Leave site?" box; a page can't change its wording.
+window.addEventListener('beforeunload', e => {
+  if (!P || (!unsaved() && !bendPts.length && !lotPts.length)) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+// Leaving anyway gives autosave one last chance to write the changes.
+window.addEventListener('pagehide', () => {
+  if (!P || !autosaveOn || saveConflict || !unsaved()) return;
+  try {
+    navigator.sendBeacon('/api/save', new Blob([JSON.stringify({project: strip(P), force: false})],
+      {type: 'application/json'}));
+  } catch (e) {}
+});
+$('#optAuto').checked = autosaveOn;
+$('#optAuto').onchange = e => {
+  autosaveOn = e.target.checked;
+  try { localStorage.setItem('route-mapper-autosave', autosaveOn ? 'on' : 'off'); } catch (err) {}
+  note(autosaveOn ? 'Autosave on: changes save to the projects folder a moment after you make them.'
+                  : 'Autosave off: click Save to keep your changes.');
+  if (autosaveOn && unsaved()) saveNow({}); else showSaveState();
 };
+$('#bSave').onclick = () => saveNow({manual: true});
 $('#bNew').onclick = async () => {
+  if (!await okToReplace('Start a new project')) return;
   const name = prompt('Name the study area', 'New study area');
   if (!name) return;
   P = await api('/api/new', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({name})});
-  activeRoute = 0; selected = null; render(); freshHistory();
+  activeRoute = 0; selected = null; render(); freshHistory(); markClean('');
 };
 $('#bLoad').onchange = async e => {
   const name = e.target.value;
   e.target.selectedIndex = 0;          // so the same project can be reopened
   if (!name) return;
+  if (!await okToReplace('Open "' + name + '"')) return;
   try {
     P = await api('/api/load?name=' + encodeURIComponent(name));
   } catch (err) { return; }            // api() has already shown the reason
   activeRoute = 0; selected = null; setTool('none');
   if (P.center) map.setView(P.center, P.zoom || 15);
-  render(); freshHistory();
+  render(); freshHistory(); markClean('Opened ' + name + '.json');
   note('Opened "' + name + '"');
 };
 // ---- find a place -------------------------------------------------------
@@ -3147,12 +3519,20 @@ $('#fileIn').onchange = async e => {
       note('Merged ' + obj.routes.length + ' route(s) from ' + f.name +
            '. Zone numbers were bumped to keep IDs unique.');
     } else {
+      if (!await okToReplace('Open ' + f.name)) return;
+      // /api/new first, so the server ties the opened file to nothing. If a saved
+      // project already has its name, autosave then stops and asks, rather than
+      // quietly writing over it.
+      await api('/api/new', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({name: obj.name || 'Imported study area'})});
       P = await api('/api/state', {method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify(obj)});
       activeRoute = 0; selected = null; setTool('none');
       if (P.center) map.setView(P.center, P.zoom || 15);
       render(); freshHistory();
-      note('Opened ' + f.name + '. Save to keep a copy in the projects folder.');
+      markClean('Opened ' + f.name);
+      note('Opened ' + f.name + '. ' + (autosaveOn ? 'Your changes autosave to the projects folder.'
+                                                   : 'Save to keep a copy in the projects folder.'));
     }
   } catch (err) { note('Could not open that file: ' + err.message, true); }
 };
@@ -3244,7 +3624,18 @@ $('#bExport').onchange = async e => {
     } catch (err) { note('SVG export failed: ' + err.message, true); }
     return;
   }
-  if (kind !== 'png') return void (location.href = '/api/export/' + kind);
+  if (kind === 'json'){
+    // The raw project, exactly as on screen (the same thing /api/export/json
+    // returns). Built here, so it still works if the server has stopped.
+    download(new Blob([JSON.stringify(strip(P), null, 1)], {type: 'application/json'}), safeName() + '.json');
+    return note('Project file saved to your downloads. To keep working on it, open it with Import file….');
+  }
+  while (sending){ try { await sending; } catch (err) {} }   // export the latest edit
+  if (kind !== 'png'){
+    const a = document.createElement('a');
+    a.href = '/api/export/' + kind; a.download = ''; a.click();
+    return;
+  }
   // PNG is rasterised here from the SVG, which keeps the Python side dependency-free.
   try {
     note('Rendering PNG…');
@@ -3271,6 +3662,7 @@ $('#bExport').onchange = async e => {
 
 async function loadProjectList(){
   const r = await api('/api/projects');
+  knownProjects = new Set(r.projects);
   $('#bLoad').innerHTML = '<option value="">' +
     (r.projects.length ? 'Open\u2026 (' + r.projects.length + ')' : 'Open\u2026 (none saved)') +
     '</option>' +
@@ -3281,7 +3673,7 @@ async function loadProjectList(){
 (async () => {
   P = await api('/api/state');
   if (P.center) map.setView(P.center, P.zoom || 15);
-  setTool('none'); render(); freshHistory(); loadProjectList(); loadRefs();
+  setTool('none'); render(); freshHistory(); markClean(''); loadProjectList(); loadRefs();
 })();
 </script>
 </body>
