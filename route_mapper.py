@@ -124,6 +124,105 @@ def polygon_area_sqft(pts):
     return abs(a) / 2.0
 
 
+# Curved blocks. A block or walking leg marked "curve" is drawn as a smooth line
+# through the points that were clicked for it, so two or three clicks around a
+# bend give a clean curve instead of a run of straight pieces. Street curves are
+# mostly circular arcs, so each stretch between two clicks follows the circle
+# through them and the click before, blended into the circle through them and the
+# click after. That reproduces an arc exactly however unevenly it was clicked. A
+# centripetal Catmull-Rom spline was tried first and sat 6-45 ft off a 150-400 ft
+# radius arc with ordinary click wobble; this stays within about 2 ft (Nov 2026).
+
+CURVE_STEP_FT = 6.0                  # one point of the drawn curve every ~6 ft
+CURVE_MAX_SWEEP = math.radians(120)  # a stretch bending further than this is drawn straight
+
+
+def _circle(a, b, c):
+    """Centre of the circle through three points (x, y), and which way a->b->c
+    turns, or None if they are in a line."""
+    d = 2 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]))
+    span = max(math.dist(a, b), math.dist(b, c), math.dist(a, c))
+    if abs(d) < 1e-6 * span * span:
+        return None
+    sa, sb, sc = a[0] ** 2 + a[1] ** 2, b[0] ** 2 + b[1] ** 2, c[0] ** 2 + c[1] ** 2
+    return ((sa * (b[1] - c[1]) + sb * (c[1] - a[1]) + sc * (a[1] - b[1])) / d,
+            (sa * (c[0] - b[0]) + sb * (a[0] - c[0]) + sc * (b[0] - a[0])) / d,
+            1 if d > 0 else -1)
+
+
+def _arc(circ, p, q):
+    """The arc of `circ` from p to q, as (cx, cy, r, start angle, sweep), or None
+    for a straight line: no circle, or one that would swing round too far."""
+    if circ is None:
+        return None
+    cx, cy, turn = circ
+    a0 = math.atan2(p[1] - cy, p[0] - cx)
+    sweep = ((math.atan2(q[1] - cy, q[0] - cx) - a0) * turn) % (2 * math.pi)
+    if sweep > CURVE_MAX_SWEEP:
+        return None
+    return (cx, cy, math.hypot(p[0] - cx, p[1] - cy), a0, sweep * turn)
+
+
+def _on_arc(arc, p, q, s):
+    if arc is None:
+        return (p[0] + (q[0] - p[0]) * s, p[1] + (q[1] - p[1]) * s)
+    cx, cy, r, a0, sweep = arc
+    return (cx + r * math.cos(a0 + sweep * s), cy + r * math.sin(a0 + sweep * s))
+
+
+def smooth_path(pts):
+    """A smooth line through every point of pts, as a denser list of [lat, lng].
+
+    The clicked points come back exactly as they were, so shared corners stay
+    joined; the points in between are rounded to 7 decimals (about 1 cm). A
+    click bunched up within 15 ft of its neighbour is a wobble rather than a
+    bend, so it is passed over when picking the third point of a circle."""
+    if len(pts) < 3:
+        return [list(p) for p in pts]
+    lat0, lng0 = pts[0][0], pts[0][1]
+    ky = EARTH_RADIUS_FT * math.pi / 180.0
+    kx = ky * math.cos(math.radians(lat0))
+    xy = [((p[1] - lng0) * kx, (p[0] - lat0) * ky) for p in pts]
+    out = [list(pts[0])]
+    for i in range(len(xy) - 1):
+        p, q = xy[i], xy[i + 1]
+        span = math.dist(p, q)
+        if span > 0.5:
+            gap = min(15.0, 0.25 * span)
+            j, k = i - 1, i + 2
+            while j >= 0 and math.dist(xy[j], p) < gap:
+                j -= 1
+            while k < len(xy) and math.dist(xy[k], q) < gap:
+                k += 1
+            before = _arc(_circle(xy[j], p, q), p, q) if j >= 0 else None
+            after = _arc(_circle(p, q, xy[k]), p, q) if k < len(xy) else None
+            # At the ends, and where one circle is unusable, the other stands in.
+            if j < 0 or before is None:
+                before = after
+            if k >= len(xy) or after is None:
+                after = before
+            bend = max(abs(before[4]) if before else 0, abs(after[4]) if after else 0)
+            n = max(4, min(48, int(math.ceil(span * (1 + bend / 4) / CURVE_STEP_FT))))
+            if before is None and after is None:
+                n = 1                         # a straight stretch needs no points
+            for t in range(1, n):
+                s = t / n
+                a, b = _on_arc(before, p, q, s), _on_arc(after, p, q, s)
+                x, y = a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s
+                out.append([round(lat0 + y / ky, 7), round(lng0 + x / kx, 7)])
+        out.append(list(pts[i + 1]))
+    return out
+
+
+def leg_path(seg):
+    """The line a leg is drawn, measured and exported along: its points, or the
+    smooth curve through them when the leg is marked as a curve."""
+    pts = seg.get("pts") or []
+    if seg.get("curve") and seg.get("kind") != "lot" and len(pts) >= 3:
+        return smooth_path(pts)
+    return [list(p) for p in pts]
+
+
 # ---------------------------------------------------------------------------
 # The inventory ID numbering rule
 # ---------------------------------------------------------------------------
@@ -343,7 +442,7 @@ def _walk_order(segments):
                 sg["anchor_at"] = None
             order.append(sg)
             continue
-        t, sg["anchor_at"] = _project_on_path(leg["pts"], sg["anchor"])
+        t, sg["anchor_at"] = _project_on_path(leg.get("path") or leg["pts"], sg["anchor"])
         (before if t < 0.5 else after).setdefault(leg["uid"], []).append((t, sg))
     out = []
     for sg in order:
@@ -372,6 +471,11 @@ def compute(project):
     duplicate_ids = set()
 
     for route in out["routes"]:
+        # Every leg's drawn line first: lots are placed along it, and lengths,
+        # labels and every export use it. A curved leg's is the smooth curve.
+        for sg in route.get("segments", []):
+            if sg.get("kind") != "lot":
+                sg["path"] = leg_path(sg)
         # The returned segments are in walking order, so the UI's list and the
         # next save follow it too.
         route["segments"] = _walk_order(route.get("segments", []))
@@ -409,9 +513,9 @@ def compute(project):
                 seg["label_at"] = polygon_centroid(pts)
                 length = 0.0
             else:
-                length = path_length_ft(pts)
+                length = path_length_ft(seg["path"])
                 seg["length_ft"] = round(length, 1)
-                seg["label_at"] = midpoint_of_path(pts)
+                seg["label_at"] = midpoint_of_path(seg["path"])
                 seg["area_sqft"] = 0.0
 
             if seg.get("label_pos"):
@@ -625,7 +729,7 @@ def _gis_geometry(seg):
         if sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(ring, ring[1:])) < 0:
             ring.reverse()
         return {"type": "Polygon", "coordinates": [ring]}
-    coords = [_lnglat(pt) for pt in seg.get("pts") or []]
+    coords = [_lnglat(pt) for pt in seg.get("path") or seg.get("pts") or []]
     return {"type": "LineString", "coordinates": coords} if len(coords) >= 2 else None
 
 
@@ -772,7 +876,8 @@ def _plan_frame(p, width, pad, fallback=None):
     """Bounds and scale of a plan sheet in Web Mercator, for an already computed
     project. The SVG, the PDF and the basemap metadata all use this one frame, so
     the tiles the browser drops behind an SVG always line up with the drawing."""
-    pts = [pt for route in p["routes"] for seg in route["segments"] for pt in seg["pts"]]
+    pts = [pt for route in p["routes"] for seg in route["segments"]
+           for pt in (seg.get("path") or seg["pts"])]
     pts += [route[k] for route in p["routes"] for k in ("start_at", "end_at") if route.get(k)]
     if not pts:
         if not fallback:
@@ -785,6 +890,26 @@ def _plan_frame(p, width, pad, fallback=None):
     return {"minx": minx, "maxx": maxx, "miny": miny, "maxy": maxy,
             "scale": scale, "pad": pad, "width": width,
             "height": spany * scale + 2 * pad}
+
+
+def _chevrons(line, step, shortest, end_gap):
+    """Where to put direction chevrons along a drawn line (x, y points): one
+    every `step` along its whole length, the first at `step` or half way, as
+    (x, y, angle in degrees). None on a line shorter than `shortest`."""
+    pieces = [(a, b, math.hypot(b[0] - a[0], b[1] - a[1])) for a, b in zip(line, line[1:])]
+    total = sum(n for _, _, n in pieces)
+    out = []
+    if total < shortest:
+        return out
+    dist, run = min(step, total / 2), 0.0
+    for a, b, n in pieces:
+        while n > 0 and dist <= run + n and dist < total - end_gap:
+            t = (dist - run) / n
+            out.append((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t,
+                        math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))))
+            dist += step
+        run += n
+    return out
 
 
 def svg_geometry(project, width=2000, pad=70):
@@ -830,31 +955,21 @@ def export_svg(project, width=2000, pad=70):
                          'stroke-width="3" stroke-linejoin="round"/>'
                          % (d, route["color"], route["color"]))
                 continue
-            d = " ".join("%s%.1f,%.1f" % ("M" if i == 0 else "L", *P(pt))
-                         for i, pt in enumerate(seg["pts"]))
+            line = [P(pt) for pt in seg["path"]]
+            d = " ".join("%s%.1f,%.1f" % ("M" if i == 0 else "L", x, y)
+                         for i, (x, y) in enumerate(line))
             dash = '' if seg["kind"] == "count" else ' stroke-dasharray="9 7"'
             w = 5 if seg["kind"] == "count" else 2.6
             o.append('<path d="%s" fill="none" stroke="%s" stroke-width="%.1f" '
                      'stroke-linecap="round" stroke-linejoin="round"%s/>'
                      % (d, route["color"], w, dash))
-            # Chevrons pointing the way the route is walked.
-            for j in range(len(seg["pts"]) - 1):
-                ax, ay = P(seg["pts"][j])
-                bx, by = P(seg["pts"][j + 1])
-                seglen = math.hypot(bx - ax, by - ay)
-                if seglen < 26:
-                    continue
-                ang = math.degrees(math.atan2(by - ay, bx - ax))
-                step = 62.0
-                dist = min(step, seglen / 2)
-                while dist < seglen - 6:
-                    t = dist / seglen
-                    cx, cy = ax + (bx - ax) * t, ay + (by - ay) * t
-                    o.append('<path d="M-4.5,-3.6 L4.5,0 L-4.5,3.6 Z" fill="#ffffff" '
-                             'stroke="%s" stroke-width="1" stroke-linejoin="round" '
-                             'transform="translate(%.1f,%.1f) rotate(%.1f)"/>'
-                             % (route["color"], cx, cy, ang))
-                    dist += step
+            # Chevrons pointing the way the route is walked, stepped along the
+            # whole line so a curve (many short pieces) gets them too.
+            for cx, cy, ang in _chevrons(line, 62.0, 26.0, 6.0):
+                o.append('<path d="M-4.5,-3.6 L4.5,0 L-4.5,3.6 Z" fill="#ffffff" '
+                         'stroke="%s" stroke-width="1" stroke-linejoin="round" '
+                         'transform="translate(%.1f,%.1f) rotate(%.1f)"/>'
+                         % (route["color"], cx, cy, ang))
         for seg in route["segments"]:
             if seg["kind"] not in ("count", "lot") or not seg.get("label_at"):
                 continue
@@ -973,7 +1088,7 @@ DATA.routes.forEach(rt => {
       + (seg.flagged ? '<br><b style="color:#E5484D">Flagged for follow-up</b>' : '');
     const shape = seg.kind === 'lot'
       ? L.polygon(seg.pts,{color:rt.color,weight:3,fillColor:rt.color,fillOpacity:.18})
-      : L.polyline(seg.pts,{color:rt.color,weight:seg.kind==='count'?6:3,
+      : L.polyline(seg.path || seg.pts,{color:rt.color,weight:seg.kind==='count'?6:3,
           dashArray:seg.kind==='count'?null:'9 8'});
     shape.bindPopup(tip).addTo(map);
     if (seg.inv_id && seg.label_at)
@@ -1086,8 +1201,9 @@ def export_pdf(project, width=1000, pad=44):
         for seg in route["segments"]:
             if len(seg["pts"]) < 2:
                 continue
-            path = ["%.2f %.2f m" % P(seg["pts"][0])]
-            path += ["%.2f %.2f l" % P(q) for q in seg["pts"][1:]]
+            line = seg.get("path") or seg["pts"]
+            path = ["%.2f %.2f m" % P(line[0])]
+            path += ["%.2f %.2f l" % P(q) for q in line[1:]]
             if seg["kind"] == "lot":
                 out.append("%.3f %.3f %.3f rg" % col)
                 out.append("[] 0 d 2.5 w")
@@ -1565,16 +1681,17 @@ kbd{background:var(--ink3);border:1px solid var(--line);border-radius:3px;paddin
     <p class="tiny" style="margin:9px 0 0">Click along the street to lay the route down.
     Each click closes the leg behind it, so switching between counting and walking
     mid-route just means clicking the other tool and carrying on. <b>On a curved street,
-    hold <kbd>Shift</kbd> while you click</b> to bend the block along the curve instead of
-    ending it; it stays one block with one ID, and the next plain click ends it. Already
+    hold <kbd>Shift</kbd> and click once or twice along the curve</b>, then click normally
+    where the block ends: it becomes one smooth curve through those points, with one ID.
+    <kbd>Alt</kbd>/<kbd>Option</kbd>-click bends it at a sharp corner instead. Already
     split a curve into several IDs? Open the first one and click <b>Merge with next</b>
-    (or press <kbd>M</kbd>). A parking lot is tied
+    (or press <kbd>M</kbd>), then <b>Make it a smooth curve</b>. A parking lot is tied
     to the route by a line where it is counted; click the lot to see the line, and drag
     its end along the route to move the lot in the walking order. Missed a block? Turn on
     <b>＋ Insert a block</b> (or press <kbd>I</kbd>) and drag the white handle in the middle of a
     line: the block splits there and the IDs after it renumber. Right-click and drag to rotate
     the map.
-    <kbd>C</kbd> count · <kbd>W</kbd> walk · <kbd>L</kbd> lot · <kbd>⇧</kbd>-click bend the block · <kbd>A</kbd> direction arrows · <kbd>I</kbd> insert a block · <kbd>F</kbd> flip the selected block · <kbd>M</kbd> merge it with the next · <kbd>P</kbd> corner handles · <kbd>Esc</kbd> select · <kbd>⌘Z</kbd> undo · <kbd>⇧⌘Z</kbd> redo · <kbd>Delete</kbd> removes the selected block. Drag an ID to move that block face, or drag a corner handle or endpoint to adjust the line. A selected block shows its own two ends as blue tabs: drag one to pull just that end away (it keeps its number), and drop it on another block's end to join them.</p>
+    <kbd>C</kbd> count · <kbd>W</kbd> walk · <kbd>L</kbd> lot · <kbd>⇧</kbd>-click curve the block · <kbd>A</kbd> direction arrows · <kbd>I</kbd> insert a block · <kbd>F</kbd> flip the selected block · <kbd>M</kbd> merge it with the next · <kbd>P</kbd> corner handles · <kbd>Esc</kbd> select · <kbd>⌘Z</kbd> undo · <kbd>⇧⌘Z</kbd> redo · <kbd>Delete</kbd> removes the selected block. Drag an ID to move that block face, or drag a corner handle or endpoint to adjust the line. A selected block shows its own two ends as blue tabs: drag one to pull just that end away (it keeps its number), and drop it on another block's end to join them.</p>
   </section>
 
   <section>
@@ -1672,7 +1789,9 @@ let P = null, tool = 'none', activeRoute = 0, selected = null, lotPts = [],
     lotFor = null, toolBeforeLot = 'none',
     dragging = false, showPts = true, jointsOn = true, snapOn = true, mergeMode = false,
     breakAway = false, selVertex = null,
-    bendPts = [];   // Shift-clicked bends of the block being drawn, not yet part of P
+    bendPts = [],   // bends of the block being drawn, not yet part of P
+    bendCurvy = [], // for each bend: Shift (smooth) rather than Alt/Option (sharp)
+    lastCursor = null;
 let undoStack = [], redoStack = [], snapshot = null;
 
 // Opens on all of Oakland (a project's own saved view takes over once it loads).
@@ -2161,10 +2280,102 @@ function strip(p){
       'spaces_effective','spaces_known','spaces_est','minutes_suggested','id_is_manual',
       'area_sqft','perimeter_ft','anchor_at']
       .forEach(k => delete s[k]);}); });
+  c.routes.forEach(r => r.segments.forEach(s => { delete s.path; }));
   delete c.lots;
   return c;
 }
 const R = () => P.routes[activeRoute];
+
+// ---- curved legs -------------------------------------------------------------
+// A leg with curve: true is drawn as a smooth line through its points. compute()
+// sends that line as `path` (smooth_path in Python), and it is what gets drawn,
+// measured and exported. smoothPath() here is the same arithmetic, used only to
+// preview: while a curve is being drawn or dragged, and for the moment between an
+// edit and the server's reply. Lengths and times always come from Python.
+function smoothPath(pts){
+  pts = pts.map(p => [p[0], p[1]]);
+  if (pts.length < 3) return pts;
+  const lat0 = pts[0][0], lng0 = pts[0][1];
+  const ky = 20902231.0 * Math.PI / 180, kx = ky * Math.cos(lat0 * Math.PI / 180);
+  const xy = pts.map(p => [(p[1] - lng0) * kx, (p[0] - lat0) * ky]);
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  const circle = (a, b, c) => {
+    const d = 2 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]));
+    const span = Math.max(dist(a, b), dist(b, c), dist(a, c));
+    if (Math.abs(d) < 1e-6 * span * span) return null;
+    const sa = a[0]*a[0] + a[1]*a[1], sb = b[0]*b[0] + b[1]*b[1], sc = c[0]*c[0] + c[1]*c[1];
+    return [(sa * (b[1] - c[1]) + sb * (c[1] - a[1]) + sc * (a[1] - b[1])) / d,
+            (sa * (c[0] - b[0]) + sb * (a[0] - c[0]) + sc * (b[0] - a[0])) / d, d > 0 ? 1 : -1];
+  };
+  const TAU = 2 * Math.PI, MAX_SWEEP = 120 * Math.PI / 180;
+  const arc = (circ, p, q) => {
+    if (!circ) return null;
+    const [cx, cy, turn] = circ, a0 = Math.atan2(p[1] - cy, p[0] - cx);
+    const sweep = ((((Math.atan2(q[1] - cy, q[0] - cx) - a0) * turn) % TAU) + TAU) % TAU;
+    return sweep > MAX_SWEEP ? null : [cx, cy, Math.hypot(p[0] - cx, p[1] - cy), a0, sweep * turn];
+  };
+  const on = (a, p, q, s) => !a ? [p[0] + (q[0] - p[0]) * s, p[1] + (q[1] - p[1]) * s]
+    : [a[0] + a[2] * Math.cos(a[3] + a[4] * s), a[1] + a[2] * Math.sin(a[3] + a[4] * s)];
+  const out = [pts[0]];
+  for (let i = 0; i < xy.length - 1; i++){
+    const p = xy[i], q = xy[i + 1], span = dist(p, q);
+    if (span > 0.5){
+      const gap = Math.min(15, 0.25 * span);
+      let j = i - 1, k = i + 2;
+      while (j >= 0 && dist(xy[j], p) < gap) j--;
+      while (k < xy.length && dist(xy[k], q) < gap) k++;
+      let before = j >= 0 ? arc(circle(xy[j], p, q), p, q) : null;
+      let after = k < xy.length ? arc(circle(p, q, xy[k]), p, q) : null;
+      if (j < 0 || !before) before = after;
+      if (k >= xy.length || !after) after = before;
+      const bend = Math.max(before ? Math.abs(before[4]) : 0, after ? Math.abs(after[4]) : 0);
+      const n = !before && !after ? 1 : Math.max(4, Math.min(48, Math.ceil(span * (1 + bend / 4) / 6)));
+      for (let t = 1; t < n; t++){
+        const s = t / n, a = on(before, p, q, s), b = on(after, p, q, s);
+        const x = a[0] + (b[0] - a[0]) * s, y = a[1] + (b[1] - a[1]) * s;
+        out.push([lat0 + y / ky, lng0 + x / kx]);
+      }
+    }
+    out.push(pts[i + 1]);
+  }
+  return out;
+}
+// Where each of `knots` sits in `line` (which passes through them in order), or
+// null if it doesn't.
+function knotsIn(line, knots){
+  const idx = []; let j = 0;
+  for (const k of knots){
+    while (j < line.length && !samePt(line[j], k)) j++;
+    if (j >= line.length) return null;
+    idx.push(j);
+  }
+  return idx;
+}
+// The line a leg is drawn along: its points, or for a curve the server's path
+// (a preview if that is out of date).
+function pathOf(seg){
+  if (seg.kind === 'lot' || !seg.curve || seg.pts.length < 3) return seg.pts;
+  return seg.path && knotsIn(seg.path, seg.pts) ? seg.path : smoothPath(seg.pts);
+}
+const previewOf = (seg, pts) => seg.curve && pts.length >= 3 ? smoothPath(pts) : pts;
+// Screen-space walking along a line of container points.
+function lengthPx(cps){
+  let n = 0; for (let i = 1; i < cps.length; i++) n += Math.hypot(cps[i].x - cps[i-1].x, cps[i].y - cps[i-1].y);
+  return n;
+}
+function alongPx(cps, dist){
+  let run = 0;
+  for (let i = 1; i < cps.length; i++){
+    const a = cps[i-1], b = cps[i], n = Math.hypot(b.x - a.x, b.y - a.y);
+    if (n > 0 && (run + n >= dist || i === cps.length - 1)){
+      const t = Math.max(0, Math.min(1, (dist - run) / n));
+      return {x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, dx: b.x - a.x, dy: b.y - a.y};
+    }
+    run += n;
+  }
+  const a = cps[0]; return {x: a.x, y: a.y, dx: 1, dy: 0};
+}
+// ---- end of curved legs ----------------------------------------------------------
 
 // ---- drawing -------------------------------------------------------------
 // Dragging one corner has to move it on every leg that shares it, or the route
@@ -2222,10 +2433,27 @@ function setInsertMode(on, uid){
 // space count, flags), the second half is a new block on the same street. Lots
 // tied to the leg re-tie to whichever half they sit by.
 function splitLegAt(rt, seg, i, pt){
+  // A curve keeps its shape: each half stays a curve, and a half left with only
+  // its two ends (which would draw straight) gets back a point from the middle of
+  // its stretch of the old curve.
+  const old = seg.curve && seg.pts.length >= 3 ? pathOf(seg) : null, knots = old && knotsIn(old, seg.pts);
+  let mids = [null, null];
+  if (knots){
+    let at = knots[i], best = Infinity;
+    for (let j = knots[i]; j <= knots[i + 1]; j++){
+      const d = map.distance(old[j], pt);
+      if (d < best){ best = d; at = j; }
+    }
+    if (at - knots[i] >= 2) mids[0] = old[Math.round((knots[i] + at) / 2)].slice();
+    if (knots[i + 1] - at >= 2) mids[1] = old[Math.round((at + knots[i + 1]) / 2)].slice();
+  }
   const rest = mkSeg(seg.kind, [pt.slice()].concat(seg.pts.slice(i + 1).map(q => q.slice())));
   rest.street = seg.street;
+  if (seg.curve) rest.curve = true;
   if (seg.is_route_end){ rest.is_route_end = true; seg.is_route_end = false; }
   seg.pts = seg.pts.slice(0, i + 1).concat([pt.slice()]);
+  if (seg.pts.length === 2 && mids[0]) seg.pts.splice(1, 0, mids[0]);
+  if (rest.pts.length === 2 && mids[1]) rest.pts.splice(1, 0, mids[1]);
   rt.segments.splice(rt.segments.indexOf(seg) + 1, 0, rest);
   rt.segments.forEach(l => {
     if (l.kind === 'lot' && l.anchor_leg === seg.uid && l.anchor) attachLot(rt, l, l.anchor);
@@ -2251,22 +2479,22 @@ function insertPoint(rt, seg, i, dropped, bendOnly){
 function drawMidHandles(rt, lines){
   rt.segments.forEach(seg => {
     if (seg.kind === 'lot' || seg.pts.length < 2) return;
+    const path = pathOf(seg), knots = knotsIn(path, seg.pts), line = lines[seg.uid];
     for (let i = 0; i < seg.pts.length - 1; i++){
-      const a = seg.pts[i], b = seg.pts[i + 1];
-      if (samePt(a, b)) continue;
-      const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], line = lines[seg.uid];
+      if (samePt(seg.pts[i], seg.pts[i + 1])) continue;
+      // The stretch as drawn: straight, or its piece of the curve. The handle
+      // goes half way along it.
+      const cps = (knots ? path.slice(knots[i], knots[i + 1] + 1) : [seg.pts[i], seg.pts[i + 1]])
+        .map(q => map.latLngToContainerPoint(q));
+      const len = lengthPx(cps);
+      let m = alongPx(cps, len / 2);
       // A block's ID badge sits at its middle, right where this handle would go
       // and on top of it, so move the handle along the line clear of the badge.
-      let at = mid;
       if (seg.label_at){
-        const ca = map.latLngToContainerPoint(a), cb = map.latLngToContainerPoint(b);
-        const cm = map.latLngToContainerPoint(mid), cl = map.latLngToContainerPoint(seg.label_at);
-        const len = Math.hypot(cb.x - ca.x, cb.y - ca.y);
-        if (Math.hypot(cl.x - cm.x, cl.y - cm.y) < 20 && len > 70){
-          const k = 26 / len, ll = map.containerPointToLatLng(L.point(cm.x - (cb.x - ca.x) * k, cm.y - (cb.y - ca.y) * k));
-          at = [ll.lat, ll.lng];
-        }
+        const cl = map.latLngToContainerPoint(seg.label_at);
+        if (Math.hypot(cl.x - m.x, cl.y - m.y) < 20 && len > 70) m = alongPx(cps, len / 2 - 26);
       }
+      const mll = map.containerPointToLatLng(L.point(m.x, m.y)), at = [mll.lat, mll.lng];
       const h = L.marker(at, {draggable: true, zIndexOffset: 450, icon: L.divIcon({className: '',
         iconSize: [13, 13], html: '<div class="midpt" style="border-color:' + esc(rt.color) + '"></div>'})})
         .bindTooltip(seg.inv_id ? 'Drag or click to insert a block in ' + esc(seg.inv_id)
@@ -2276,7 +2504,7 @@ function drawMidHandles(rt, lines){
         if (!line) return;
         const ll = ev.target.getLatLng(), pts = seg.pts.map(q => q.slice());
         pts.splice(i + 1, 0, [ll.lat, ll.lng]);
-        line.setLatLngs(pts);
+        line.setLatLngs(previewOf(seg, pts));
       });
       h.on('dragend', ev => {
         const ll = ev.target.getLatLng();
@@ -2311,6 +2539,7 @@ function mergeWithNext(rt, seg){
       + 'its end tab onto the next block\'s start.', true);
   const gone = next.inv_id, oneCount = (seg.spaces == null) !== (next.spaces == null);
   seg.pts = seg.pts.concat(next.pts.slice(1).map(q => q.slice()));
+  if (next.curve) seg.curve = true;
   if (seg.spaces != null || next.spaces != null) seg.spaces = (seg.spaces || 0) + (next.spaces || 0);
   seg.street = seg.street || next.street;
   seg.note = [seg.note, next.note].filter((t, i, a) => t && a.indexOf(t) === i).join(' · ');
@@ -2323,9 +2552,10 @@ function mergeWithNext(rt, seg){
   push().then(() => {
     const r = P.routes.find(x => x.uid === rt.uid) || rt;
     const me = (r.segments.find(x => x.uid === seg.uid) || {}).inv_id;
-    note(me ? 'Merged ' + (gone || 'the next block') + ' into ' + me + '; the IDs after it moved up one.'
-              + (oneCount ? ' Only one half had a space count, so check it.' : '')
-            : 'Merged the two walking legs.');
+    note((me ? 'Merged ' + (gone || 'the next block') + ' into ' + me + '; the IDs after it moved up one.'
+               + (oneCount ? ' Only one half had a space count, so check it.' : '')
+             : 'Merged the two walking legs.')
+      + (seg.curve ? '' : ' If it follows a curve, open it and click Make it a smooth curve.'));
   });
 }
 // ---- end of inserting a block --------------------------------------------------
@@ -2350,10 +2580,11 @@ function snapTarget(pt, ignoreSeg){
   // nothing at a corner - try landing on a line
   rt.segments.forEach(sg => {
     if (sg === ignoreSeg || sg.pts.length < 2) return;
-    const n = sg.kind === 'lot' ? sg.pts.length : sg.pts.length - 1;
+    const line = pathOf(sg);
+    const n = sg.kind === 'lot' ? line.length : line.length - 1;
     for (let i = 0; i < n; i++){
-      const a = map.latLngToContainerPoint(sg.pts[i]);
-      const b = map.latLngToContainerPoint(sg.pts[(i+1) % sg.pts.length]);
+      const a = map.latLngToContainerPoint(line[i]);
+      const b = map.latLngToContainerPoint(line[(i+1) % line.length]);
       const vx = b.x-a.x, vy = b.y-a.y, L2 = vx*vx + vy*vy;
       if (!L2) continue;
       let t = ((c.x-a.x)*vx + (c.y-a.y)*vy) / L2;
@@ -2407,6 +2638,7 @@ function dissolveVertex(pt){
   const keepA = a.pts.filter(other), keepB = b.pts.filter(other);
   a.pts = a.pts[a.pts.length-1] && samePt(a.pts[a.pts.length-1], pt)
         ? keepA.concat(keepB) : keepB.concat(keepA);
+  if (b.curve) a.curve = true;
   rt.segments = rt.segments.filter(x => x !== b);
   selVertex = null;
   push();
@@ -2455,12 +2687,13 @@ map.on('click', e => {
     const prev = lastVertex();
     if (!prev){ rt.start = pt; return push(); }
     const tail = bendPts.length ? bendPts[bendPts.length - 1] : prev;
-    // Shift (or Alt/Option) bends the block here instead of ending it, so a curved
-    // street stays one block with one ID and still follows the curb.
+    // Shift bends the block here instead of ending it, and the block becomes a
+    // smooth curve through its bends, so a curved street is one block with one ID
+    // that follows the curb. Alt/Option bends it at a sharp corner instead.
     const ev = e.originalEvent || {};
     if (ev.shiftKey || ev.altKey){
       if (nearPx(pt, tail, 6)) return;
-      bendPts.push(pt);
+      bendPts.push(pt); bendCurvy.push(!!ev.shiftKey);
       return drawDraft();
     }
     // A second click on the point just placed (a double-click, say) used to lay
@@ -2469,12 +2702,14 @@ map.on('click', e => {
       if (!bendPts.length) return;
       return finishBends();
     }
-    rt.segments.push(mkSeg(tool, [prev].concat(bendPts, [pt])));
+    const sg = mkSeg(tool, [prev].concat(bendPts, [pt]));
+    if (bendCurvy.some(Boolean)) sg.curve = true;
+    rt.segments.push(sg);
     const bent = bendPts.length;
-    bendPts = []; drawDraft();
+    bendPts = []; bendCurvy = []; drawDraft();
     push();
-    if (bent) note('Laid one ' + (tool === 'count' ? 'block' : 'walking leg') + ' through '
-      + bent + ' bend' + (bent > 1 ? 's' : '') + '.');
+    if (bent) note('Laid one ' + (tool === 'count' ? 'block' : 'walking leg') + (sg.curve ? ' curving' : '')
+      + ' through ' + bent + ' bend' + (bent > 1 ? 's' : '') + '.');
     return;
   }
 });
@@ -2482,27 +2717,43 @@ map.on('click', e => {
 // click. Switching tools or routes does this too, so bends are never lost.
 function finishBends(){
   if (!bendPts.length) return false;
-  const rt = R(), prev = lastVertex(), pts = bendPts;
-  bendPts = []; drawDraft();
+  const rt = R(), prev = lastVertex(), pts = bendPts, curvy = bendCurvy.some(Boolean);
+  bendPts = []; bendCurvy = []; drawDraft();
   if (!prev || !(tool === 'count' || tool === 'walk')) return false;
-  rt.segments.push(mkSeg(tool, [prev].concat(pts)));
+  const sg = mkSeg(tool, [prev].concat(pts));
+  if (curvy) sg.curve = true;
+  rt.segments.push(sg);
   push();
   return true;
 }
 function undoBend(){
   if (!bendPts.length) return false;
-  bendPts.pop(); drawDraft();
+  bendPts.pop(); bendCurvy.pop(); drawDraft();
   note(bendPts.length ? 'Took back the last bend.' : 'Took back the bend. The next click ends a straight block.');
   return true;
 }
 map.on('dblclick', () => { if (tool === 'lot') finishLot(); });
-map.on('mousemove', e => {
+// While drawing a leg: the part already bent, solid, and from there to the
+// pointer, dashed, both cut from one line so a curve previews as it will be laid.
+const bendLine = L.polyline([], {interactive: false});
+function showLegPreview(){
   const from = P && (tool === 'count' || tool === 'walk') && lastVertex();
-  if (!from) return rubber.remove();
-  rubber.setLatLngs([from].concat(bendPts, [e.latlng]));
-  if (!map.hasLayer(rubber)) rubber.addTo(map);
-});
-map.on('mouseout', () => rubber.remove());
+  if (!from){ rubber.remove(); bendLine.remove(); return; }
+  const knots = [from].concat(bendPts), all = lastCursor ? knots.concat([lastCursor]) : knots;
+  const line = bendCurvy.some(Boolean) ? smoothPath(all) : all;
+  const idx = knotsIn(line, all), cut = idx ? idx[knots.length - 1] : knots.length - 1;
+  if (bendPts.length){
+    bendLine.setLatLngs(line.slice(0, cut + 1)).setStyle({color: R().color,
+      weight: tool === 'count' ? 6 : 3, opacity: .55, dashArray: tool === 'count' ? null : '9 8'});
+    if (!map.hasLayer(bendLine)) bendLine.addTo(map);
+  } else bendLine.remove();
+  if (lastCursor){
+    rubber.setLatLngs(line.slice(cut));
+    if (!map.hasLayer(rubber)) rubber.addTo(map);
+  } else rubber.remove();
+}
+map.on('mousemove', e => { lastCursor = [e.latlng.lat, e.latlng.lng]; showLegPreview(); });
+map.on('mouseout', () => { lastCursor = null; showLegPreview(); });
 
 function near(a, b){ return nearPx(a, b, 14); }   // ~a fingertip on screen
 function nearPx(a, b, px){
@@ -2563,8 +2814,9 @@ function nearestOnRoute(rt, pts){
   const cs = pts.map(p => map.latLngToContainerPoint(p));
   rt.segments.forEach(sg => {
     if (sg.kind === 'lot' || sg.pts.length < 2) return;
-    for (let i = 0; i < sg.pts.length - 1; i++){
-      const a = map.latLngToContainerPoint(sg.pts[i]), b = map.latLngToContainerPoint(sg.pts[i+1]);
+    const line = pathOf(sg);
+    for (let i = 0; i < line.length - 1; i++){
+      const a = map.latLngToContainerPoint(line[i]), b = map.latLngToContainerPoint(line[i+1]);
       const vx = b.x-a.x, vy = b.y-a.y, L2 = vx*vx + vy*vy;
       cs.forEach(c => {
         const t = L2 ? Math.max(0, Math.min(1, ((c.x-a.x)*vx + (c.y-a.y)*vy) / L2)) : 0;
@@ -2633,7 +2885,7 @@ function drawEndTabs(rt, seg, line){
     h.on('dragstart', () => { dragging = true; });
     h.on('drag', ev => {
       const ll = ev.target.getLatLng(), pts = seg.pts.map(q => q.slice());
-      pts[k] = [ll.lat, ll.lng]; line.setLatLngs(pts);
+      pts[k] = [ll.lat, ll.lng]; line.setLatLngs(previewOf(seg, pts));
     });
     h.on('dragend', ev => {
       dragging = false;
@@ -2715,13 +2967,9 @@ function deleteSelected(){
 }
 function drawDraft(){
   draft.clearLayers();
-  if (bendPts.length){
-    const from = lastVertex(), col = R().color;
-    if (from) L.polyline([from].concat(bendPts), {color: col, weight: tool === 'count' ? 6 : 3,
-      opacity: .55, dashArray: tool === 'count' ? null : '9 8', interactive: false}).addTo(draft);
-    bendPts.forEach(pt => L.circleMarker(pt, {radius: 4, color: '#fff', weight: 2,
-      fillColor: col, fillOpacity: 1, interactive: false}).addTo(draft));
-  }
+  showLegPreview();
+  bendPts.forEach((pt, i) => L.circleMarker(pt, {radius: bendCurvy[i] ? 4 : 3, color: '#fff', weight: 2,
+    fillColor: R().color, fillOpacity: 1, interactive: false}).addTo(draft));
   updateBendBar();
   // While redrawing, keep the old outline lit up so it is clear which lot changes.
   const target = lotFor && lotTarget();
@@ -2740,8 +2988,9 @@ function updateBendBar(){
   const bar = $('#bendbar');
   if (!bendPts.length){ bar.style.display = 'none'; return; }
   bar.style.display = 'flex';
-  $('#bendcount').textContent = 'Curving one ' + (tool === 'count' ? 'block' : 'walking leg') + ' · '
-    + bendPts.length + (bendPts.length === 1 ? ' bend' : ' bends') + '. Click without Shift where it ends.';
+  $('#bendcount').textContent = (bendCurvy.some(Boolean) ? 'Curving' : 'Bending') + ' one '
+    + (tool === 'count' ? 'block' : 'walking leg') + ' · ' + bendPts.length
+    + (bendPts.length === 1 ? ' bend' : ' bends') + '. Click without Shift where it ends.';
 }
 function updateLotBar(){
   const bar = $('#lotbar');
@@ -2761,12 +3010,12 @@ function setTool(t){
   if (tool === 'lot' && t !== 'lot' && lotPts.length >= 3) finishLot();
   if (t === 'lot' && tool !== 'lot') toolBeforeLot = tool;
   if (t !== 'none') insertMode = false;          // drawing tools end Insert a block
-  if (t !== 'count' && t !== 'walk') rubber.remove();
+  if (t !== 'count' && t !== 'walk'){ rubber.remove(); bendLine.remove(); }
   tool = t;
   document.querySelectorAll('.tool').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   const hints = {
-    count:'Click along the street. Each click ends a block face and starts the next. On a curve, hold Shift as you click to bend the block; it keeps one ID.',
-    walk:'Click along the connector. These legs are dashed and never get an ID. Hold Shift as you click to bend one.',
+    count:'Click along the street. Each click ends a block face and starts the next. On a curve, Shift-click once or twice along it, then click where the block ends: one smooth curve, one ID.',
+    walk:'Click along the connector. These legs are dashed and never get an ID. Shift-click to curve one.',
     lot: (lotFor ? 'Click the new corners for this lot.' : 'Click the corners of the lot.')
       + ' Close it by clicking the first corner again, pressing Enter, or double-clicking.',
     flag:'Click a block or lot to circle it in red for follow-up.',
@@ -2855,7 +3104,7 @@ function render(){
           fillColor: rt.color, fillOpacity: .18})
           .on('click', ev => pick(seg, ev)).addTo(layer);
       } else {
-        const line = L.polyline(seg.pts, {color: rt.color, weight: seg.kind === 'count' ? 6 : 3,
+        const line = L.polyline(pathOf(seg), {color: rt.color, weight: seg.kind === 'count' ? 6 : 3,
           opacity: dim, dashArray: seg.kind === 'count' ? null : '9 8'})
           .on('click', ev => pick(seg, ev)).addTo(layer);
         lines[seg.uid] = line;
@@ -3192,6 +3441,17 @@ function blockRow(seg, i, rt){
       + 'Use it when a curve was drawn as several blocks.';
     merge.onclick = () => mergeWithNext(rt, seg);
     acts2.appendChild(merge);
+    if (seg.pts.length >= 3){
+      const sm = document.createElement('button'); sm.className = 'hbtn';
+      sm.textContent = seg.curve ? 'Make it straight' : 'Make it a smooth curve';
+      sm.title = seg.curve ? 'Draw straight lines between its points instead of a curve'
+        : 'Draw a smooth curve through its points. Its length, and so its time, follow the curve.';
+      sm.onclick = () => {
+        seg.curve = !seg.curve;
+        push().then(() => note(seg.curve ? 'Smoothed into a curve through its points.' : 'Straightened between its points.'));
+      };
+      acts2.appendChild(sm);
+    }
   }
 
   // Marking a block or lot as the route's own start or end. Useful when the walk
@@ -3259,21 +3519,15 @@ function drawArrows(){
     const op = ri === activeRoute ? 0.95 : 0.4;
     rt.segments.forEach(seg => {
       if (seg.kind === 'lot' || seg.pts.length < 2) return;
-      for (let i = 0; i < seg.pts.length - 1; i++){
-        const a = map.latLngToContainerPoint(seg.pts[i]);
-        const b = map.latLngToContainerPoint(seg.pts[i+1]);
-        const len = Math.hypot(b.x-a.x, b.y-a.y);
-        if (len < 34) continue;
-        const deg = Math.atan2(b.y-a.y, b.x-a.x) * 180 / Math.PI;
-        for (let d = Math.min(STEP, len/2); d < len - 8; d += STEP){
-          const t = d / len;
-          const ll = map.containerPointToLatLng(
-            L.point(a.x + (b.x-a.x)*t, a.y + (b.y-a.y)*t));
-          L.marker(ll, {interactive: false, keyboard: false, zIndexOffset: 300,
-            icon: L.divIcon({className:'', iconSize:[16,16], iconAnchor:[8,8],
-              html:'<div class="arw" style="transform:rotate('+deg+'deg);opacity:'+op+'"></div>'})
-          }).addTo(arrows);
-        }
+      // Stepped along the whole line, so a curve (many short pieces) gets them too.
+      const cps = pathOf(seg).map(q => map.latLngToContainerPoint(q)), len = lengthPx(cps);
+      if (len < 34) return;
+      for (let d = Math.min(STEP, len/2); d < len - 8; d += STEP){
+        const m = alongPx(cps, d), deg = Math.atan2(m.dy, m.dx) * 180 / Math.PI;
+        L.marker(map.containerPointToLatLng(L.point(m.x, m.y)), {interactive: false, keyboard: false,
+          zIndexOffset: 300, icon: L.divIcon({className:'', iconSize:[16,16], iconAnchor:[8,8],
+            html:'<div class="arw" style="transform:rotate('+deg+'deg);opacity:'+op+'"></div>'})
+        }).addTo(arrows);
       }
     });
   });

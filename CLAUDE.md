@@ -23,8 +23,8 @@ a `new_project()` with a few `new_segment()`s. When you run it from a script, us
 ## Files
 
 - `route_mapper.py` holds the whole server build. The UI is the raw string `HTML`
-  (from `HTML = r"""`, about line 1314, to the end of the module). A second template,
-  `VIEWER` (about line 891), backs the standalone HTML export.
+  (from `HTML = r"""`, about line 1430, to the end of the module). A second template,
+  `VIEWER` (about line 1006), backs the standalone HTML export.
 - `README_route_mapper.md` is the user-facing documentation.
 - `Start Route Mapper (Windows).bat` is a double-click launcher (tries `py`, then
   `python`). It must keep CRLF line endings; `.gitattributes` pins that.
@@ -93,7 +93,8 @@ The data model is plain dicts and is JSON-serialisable:
 - **segment**: `uid`, `kind`, `pts[]`, `spaces`, `manual_id`, `flagged`, `note`,
   `street`, plus the optional flags `is_route_start` / `is_route_end`. Lots may also
   have `anchor_leg` / `anchor` (see Parking lots above) and `minutes_manual` (minutes
-  a planner typed, replacing the suggested lot time). There is also `label_pos`,
+  a planner typed, replacing the suggested lot time). A non-lot leg may have
+  `curve: true` (see Curved legs below). There is also `label_pos`,
   which `compute()` still reads but nothing sets any more.
 - **settings**: `minutes_per_block`, `spaces_per_block`, `ft_per_space`,
   `lot_sqft_per_space`, `walk_speed_ft_per_min`, `skip_multiples_of_ten`.
@@ -111,9 +112,47 @@ Old projects kept lots in a top-level `lots` list. `migrate()` folds them into t
 segment list. Lots saved before lot lines existed are untied and keep their list
 position until someone uses **Attach to the route**.
 
-**Derived fields must not be saved.** The UI's `strip()` (about line 2154) deletes them
+**Derived fields must not be saved.** The UI's `strip()` (about line 2273) deletes them
 before posting back. If you add a derived field to `compute()`, add it to `strip()` too.
-The newest ones are `spaces_est` and `minutes_suggested`.
+The newest ones are `path`, `spaces_est` and `minutes_suggested`.
+
+### Curved legs
+
+The user asked (2026-11-11) for Shift-click to draw a real curve, not a choppy line
+through the clicks.
+
+- A leg with `curve: true` and three or more `pts` is drawn along `smooth_path(pts)`:
+  - Each stretch between two clicks follows the circle through it and the click
+    before, blended linearly into the circle through it and the click after.
+  - At the ends, or when a circle is unusable, the other circle stands in. With
+    neither, the stretch is straight.
+  - A third point closer than min(15 ft, 25% of the stretch) is skipped as click
+    wobble.
+  - An arc sweeping more than 120° per stretch is drawn straight
+    (`CURVE_MAX_SWEEP`).
+  - The output has one point about every 6 ft (`CURVE_STEP_FT`), 4–48 per stretch.
+- `pts` stay the clicked points; the curve passes through them exactly, so shared
+  corners stay joined.
+- Why circles: tested (Nov 2026) against arcs of radius 150–400 ft with ±2–5 ft click
+  wobble.
+  - Circles stayed a median 2–5 ft off the arc.
+  - A centripetal Catmull-Rom spline (quadratic end conditions) was 6–45 ft off.
+  - Straight chords were 10–25 ft off.
+  - Without the 15 ft skip, two bends clicked a few feet apart made a tiny circle
+    and a wild swing.
+- `compute()` sets `path` on every non-lot leg: `leg_path()` gives the smooth path
+  for a curve, otherwise a copy of `pts`. Interior points are rounded to 7 dp.
+  Everything measured or drawn uses `path`, not `pts`:
+  - `length_ft`, `label_at`, and lot anchoring in `_walk_order`;
+  - the GIS and GeoJSON line geometry;
+  - the SVG, PDF and `_plan_frame`;
+  - the viewer.
+- SVG chevrons (`_chevrons`) and the UI's arrows step along the whole line, because
+  a curve's pieces are too short to carry one each.
+- The UI has the same arithmetic as `smoothPath()`, for previews only: drawing,
+  dragging, and the moment before the server replies. It matches Python to about
+  2 cm. `pathOf(seg)` uses the server's `path` when `knotsIn()` finds every point
+  in it, and the preview otherwise. Corner handles stay on `pts`.
 
 ## `IdSequence`: be careful here
 
@@ -261,10 +300,18 @@ Free text (names, notes, manual IDs) is escaped everywhere it becomes markup:
     `sendBeacon`.
   - New, Open and Import call `okToReplace()`, which saves first or asks.
   - The autosave on/off choice is in localStorage (`route-mapper-autosave`).
-- **Curved blocks** (`bendPts`, `finishBends`, `undoBend`, `updateBendBar`):
-  - In Count or Walk, a click with Shift (or Alt/Option) adds a bend to the leg being
-    drawn instead of ending it. The next plain click lays one leg through all the
-    bends.
+- **Bends while drawing** (`bendPts`, `bendCurvy`, `finishBends`, `undoBend`,
+  `updateBendBar`, `showLegPreview`):
+  - In Count or Walk, Shift-click adds a smooth bend and Alt/Option-click a sharp
+    one, instead of ending the leg. The next plain click lays one leg through all
+    the bends. It is `curve: true` if any bend was a Shift bend.
+  - `showLegPreview` cuts one line into the bent part (solid, `bendLine`) and the
+    part from the last bend to the pointer (dashed, `rubber`).
+  - **Make it a smooth curve** / **Make it straight** on a row of 3+ points
+    switches `curve`.
+  - `splitLegAt` keeps both halves curved. A half left with two points gets a
+    point from the middle of its stretch of the old curve.
+  - `mergeWithNext` and `dissolveVertex` keep `curve` if either leg had it.
   - Enter ends at the last bend. Backspace or ⌘Z takes one back. Switching tools or
     route tabs ends at the last bend.
   - Leaflet's box zoom is disabled while Count or Walk is the tool, because it's
@@ -345,7 +392,8 @@ Free text (names, notes, manual IDs) is escaped everywhere it becomes markup:
 ## Known issues
 
 - The Pages build (`index.html` + `engine.js`, not in this repo) has none of the
-  2026-11-09 changes yet: length-based timing, the lot suggestion and
+  2026-11-09 or 2026-11-11 changes yet. `engine.js` also needs `smooth_path` and
+  `path`. The 2026-11-09 changes are: length-based timing, the lot suggestion and
   `minutes_manual`, `clean_settings`, curved blocks and merge, autosave and
   `/api/save`'s `force`/`conflict`, and `/api/new` before import. Its fetch shim also
   has to answer `/api/save` with `{saved, file}` or `{conflict}`.

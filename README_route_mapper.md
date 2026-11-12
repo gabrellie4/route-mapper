@@ -49,10 +49,24 @@ when you're covering ground you don't count — those legs render dashed and nev
 receive an ID. New points snap to nearby corners and lines so legs join up; untick
 the snap option in the Draw panel if it gets in the way.
 
-**Curved streets.** Hold `Shift` while you click to bend the block instead of ending
-it. Shift-click a few points around the curve, then click normally where the block
-ends: it stays one block with one ID, and its length follows the curve. (`Alt`/`Option`
-works too.) While you're bending, a bar under the tools counts the bends:
+**Curved streets.** Hold `Shift` and click once or twice along the curve, then click
+normally where the block ends. The block becomes one smooth curve through the points
+you clicked, with one ID, and its length (and so its time) follows the curve. One
+Shift-click in the middle of a bend is usually enough. Add a second on a long or
+S-shaped curve. While you draw, the curve previews as it will be laid: solid up to
+the last bend, dashed from there to the pointer.
+
+The curve is fitted as circular arcs through your clicks, because street curves are
+mostly arcs. Clicked with ordinary accuracy, it typically stays within 2–5 ft of the
+real curve, where straight lines between the same clicks were 10–25 ft off. A click
+within 15 ft of another is treated as a wobble, not a bend. A stretch that would
+swing round more than 120° is drawn straight.
+
+`Alt`/`Option`-click bends the block at a sharp corner instead, for an angled block
+face. A block is either smooth or straight throughout. If you used both, it's
+smooth, and the button below switches it.
+
+While you're bending, a bar under the tools counts the bends:
 
 - `Backspace` or `⌘Z` takes back the last bend.
 - `Enter` or **End here** ends the block at the last bend.
@@ -61,10 +75,15 @@ works too.) While you're bending, a bar under the tools counts the bends:
 Clicking twice on the same spot no longer lays a block a few feet long with its own
 ID.
 
+**Make it a smooth curve** / **Make it straight** on an open block's row switches a
+block of three or more points between a curve and straight lines. Use it on blocks
+drawn with Shift-click before curves were smooth (Nov 9–10, 2026), which are still
+straight lines between their clicks.
+
 **A curve already drawn as several blocks?** Open the first of them and click
 **Merge with next** (or select it and press `M`). The next block joins onto it with
 every corner kept, so the shape doesn't change; it keeps the first block's ID and
-details, and the IDs after it move up by one. Space counts add together; if only one
+details, and the IDs after it move up by one. Then click **Make it a smooth curve**. Space counts add together; if only one
 half had a count, the note says to check it. Repeat until the curve is one block.
 Merging needs the two to meet end to start and be the same kind (both counted or both
 walk-only). Removing a joint with `Delete` also merges two blocks, but it straightens
@@ -118,7 +137,8 @@ To change a route after drawing it:
 - **Insert a block** (for a missed block, or to split one). Click **＋ Insert a block**
   at the top of the list, press `I`, or click **＋** on a block's row. Every line on the
   route gets a white handle near its middle, as when editing a line in ArcGIS Online.
-  Drag a handle, or just click it, to add a point there:
+  On a curved block the handles sit on the curve, and a split keeps both halves
+  curved. Drag a handle, or just click it, to add a point there:
   - The block splits in two at that point. The second half becomes the next block,
     and the IDs after it renumber.
   - Drag the new point wherever the walk should go. Drop it on another corner to join
@@ -142,7 +162,8 @@ To change a route after drawing it:
   scroll also rotates. The compass button under the zoom buttons turns it back to north
   up. Exports are always north up.
 
-Keys: `C` count · `W` walk · `L` lot · `Shift`-click bend the block you're drawing ·
+Keys: `C` count · `W` walk · `L` lot · `Shift`-click curve the block you're drawing ·
+`Alt`/`Option`-click sharp bend ·
 `A` direction arrows · `I` insert a block · `F` flip the selected block · `M` merge
 the selected block with the next · `P` corner handles · `Esc` select (also ends Insert
 a block) · `⌘Z` / `Ctrl+Z` undo · `⇧⌘Z` / `Ctrl+Shift+Z` redo · `Delete` removes the
@@ -250,6 +271,9 @@ else is one-way: for Survey123, GIS, printing or sharing.
   browser, so it still works if Route Mapper's black window or Terminal has been
   closed. (On your own computer, autosave already keeps the project in
   `route_projects/`; see below.)
+Curved blocks export as their smooth line (densely spaced points) in the GIS layers,
+GeoJSON, SVG, PDF and viewer.
+
 - **Inventory IDs (CSV)** — one row per block face and lot with ID, route, street,
   length, spaces, estimated minutes, flag state, note and label coordinates. This is
   the one that seeds Survey123. A lot's minutes are its suggested (or typed)
@@ -351,5 +375,7 @@ rm.stop()                     # shut it down again
 
 Distances are great-circle along the vertices you click, so they measure the path you
 drew rather than the true curb line. At block scale the difference is small, but a
-curving street needs a few more points to measure honestly: Shift-click them, so the
-block keeps one ID. Three or four bends on a 90° curve get the length within about 1%.
+curving street needs its curve: Shift-click once or twice along it, so the block keeps
+one ID and its length follows the curve. On a 90° bend of a 150 ft radius, one
+Shift-click gets the length within about 1%; straight lines between the same three
+clicks come out about 2% short.

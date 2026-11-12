@@ -1,0 +1,103 @@
+{
+ "name": "Untitled study area",
+ "settings": {
+  "minutes_per_block": 2,
+  "spaces_per_block": 10,
+  "ft_per_space": 16,
+  "lot_sqft_per_space": 325,
+  "walk_speed_ft_per_min": 260,
+  "skip_multiples_of_ten": true
+ },
+ "center": [
+  37.79956928030996,
+  -122.25293576717378
+ ],
+ "zoom": 17,
+ "basemap": "muted",
+ "routes": [
+  {
+   "uid": "a85d6bcef1",
+   "name": "Route 1",
+   "prefix": 1,
+   "color": "#2E7D4F",
+   "start": null,
+   "end": null,
+   "visible": true,
+   "segments": [
+    {
+     "uid": "a58l0wi8wl",
+     "kind": "walk",
+     "pts": [
+      [
+       37.79995924395962,
+       -122.2540032863617
+      ],
+      [
+       37.80054418557392,
+       -122.25379943847658
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    },
+    {
+     "uid": "sl4jte8032",
+     "kind": "count",
+     "pts": [
+      [
+       37.80054418557392,
+       -122.25379943847658
+      ],
+      [
+       37.80095957608142,
+       -122.25282311439516
+      ],
+      [
+       37.80077307450988,
+       -122.25191116333008
+      ],
+      [
+       37.800323773335606,
+       -122.25075244903566
+      ],
+      [
+       37.80014574758602,
+       -122.25040912628175
+      ],
+      [
+       37.79910301672214,
+       -122.25078463554384
+      ],
+      [
+       37.79978969479967,
+       -122.24997997283937
+      ]
+     ],
+     "spaces": null,
+     "manual_id": null,
+     "flagged": false,
+     "note": "",
+     "street": "",
+     "label_pos": null
+    }
+   ]
+  },
+  {
+   "uid": "jnnztv5z1q",
+   "name": "Route 2",
+   "prefix": 2,
+   "color": "#C0392B",
+   "start": [
+    37.79943364029704,
+    -122.25485086441041
+   ],
+   "end": null,
+   "visible": true,
+   "segments": []
+  }
+ ]
+}
